@@ -57,7 +57,7 @@ async def on_message(message):
         return
 
     # 「@雑談　います」というメッセージに反応
-    if "@雑談　います" in message.content or "@雑談 います" in message.content:
+    if "暇" in message.content or "暇" in message.content:
         # ランダムに雑談メッセージを選択
         chat_message = random.choice(chat_messages)
 
