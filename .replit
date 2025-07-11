@@ -1,15 +1,8 @@
-entrypoint = "main.py"
-modules = ["python-3.11"]
-
 [nix]
-channel = "stable-24_05"
+channel = "stable-22_11"
 
-[unitTest]
-language = "python3"
-
-[gitHubImport]
-requiredFiles = [".replit", "replit.nix"]
+[nix.packages]
+python3 = "latest"
 
 [deployment]
-run = ["python3", "main.py"]
-deploymentTarget = "cloudrun"
+run = ["sh", "-c", "python main.py"]
