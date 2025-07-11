@@ -1,7 +1,14 @@
-[project]
-name = "python-template"
+[tool.poetry]
+name = "your-project-name"
 version = "0.1.0"
-description = ""
-authors = ["Your Name <you@example.com>"]
-requires-python = ">=3.11"
-dependencies = []
+description = "A short description"
+authors = ["Mike0 <sagirikuzyou@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+discord-py = "^2.3.2"
+flask = "^3.1.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
