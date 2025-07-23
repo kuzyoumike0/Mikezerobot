@@ -1,18 +1,17 @@
 import discord
 from discord.ext import commands
-from discord.utils import get
 import datetime
 import pytz
 import asyncio
-import os
 
+# 日本時間のタイムゾーン設定
 JST = pytz.timezone("Asia/Tokyo")
 
 class JoinSound(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_client = None
-        self.target_channel_id = None  # Botが接続するVC ID（初回 !joinvc で決定）
+        self.target_channel_id = None  # !joinvc 実行時にセットされるVCのID
 
     @commands.command()
     async def joinvc(self, ctx):
@@ -21,14 +20,14 @@ class JoinSound(commands.Cog):
             self.target_channel_id = ctx.author.voice.channel.id
             self.voice_client = await ctx.author.voice.channel.connect()
 
-            # 無音ループ再生
+            # 無音ループを非同期で開始
             asyncio.create_task(self.play_silence_loop())
-            await ctx.send(f"{ctx.author.voice.channel.name} に参加しました。")
+            await ctx.send(f"{ctx.author.voice.channel.name} に接続しました。")
         else:
-            await ctx.send("VCに接続してからコマンドを使ってください。")
+            await ctx.send("先にVCに接続してからこのコマンドを使ってください。")
 
     async def play_silence_loop(self):
-        """silence.mp3 を無限ループ再生"""
+        """無音ファイルを継続的にループ再生する"""
         while self.voice_client and self.voice_client.is_connected():
             if not self.voice_client.is_playing():
                 source = discord.FFmpegPCMAudio("sounds/silence.mp3")
@@ -37,34 +36,36 @@ class JoinSound(commands.Cog):
 
     @commands.Cog.listener()
     async def on_voice_state_update(self, member, before, after):
-        # Bot未接続 or 接続VCが指定されていない
+        # BotがVCに未接続なら無視
         if not self.voice_client or not self.voice_client.is_connected():
             return
+
+        # 監視対象のVC IDが未設定なら無視
         if not self.target_channel_id:
             return
 
-        # 入室 or 退室したVCが対象VCと一致していなければ無視
+        # Bot自身の入退室も無視
+        if member.bot:
+            return
+
+        # 変化が対象VCに関係なければ無視
         if before.channel == after.channel:
             return
         if (before.channel and before.channel.id != self.target_channel_id) and \
            (after.channel and after.channel.id != self.target_channel_id):
             return
 
-        # Bot自身の出入りは無視
-        if member.bot:
-            return
-
-        # 入室時のSE再生
+        # 入室時の処理
         if after.channel and after.channel.id == self.target_channel_id:
             se_file = self.get_join_sound_by_time()
             await self.play_se(se_file)
 
-        # 退室時のSE再生
+        # 退室時の処理
         elif before.channel and before.channel.id == self.target_channel_id:
             await self.play_se("sounds/leave.mp3")
 
     def get_join_sound_by_time(self):
-        """時間帯に応じたSEファイルを返す"""
+        """現在のJST時間帯に応じて適切なSEファイルパスを返す"""
         now = datetime.datetime.now(JST).time()
 
         if datetime.time(4, 0) <= now < datetime.time(10, 0):
@@ -77,21 +78,24 @@ class JoinSound(commands.Cog):
             return "sounds/night.mp3"
 
     async def play_se(self, filepath):
-        """SEを一時停止して再生"""
+        """指定SEを再生し、その後に無音を再開"""
         if self.voice_client and self.voice_client.is_connected():
+            # 他のSEが再生中なら待つ
             while self.voice_client.is_playing():
                 await asyncio.sleep(0.1)
 
-            self.voice_client.stop()
-            self.voice_client.play(discord.FFmpegPCMAudio(filepath))
+            # SEを再生
+            se_source = discord.FFmpegPCMAudio(filepath)
+            self.voice_client.play(se_source)
 
-            # SEが終わるまで待つ
+            # SE終了待ち
             while self.voice_client.is_playing():
                 await asyncio.sleep(0.1)
 
-            # 無音再生再開
-            if not self.voice_client.is_playing():
-                self.voice_client.play(discord.FFmpegPCMAudio("sounds/silence.mp3"))
+            # 無音を再開
+            silence_source = discord.FFmpegPCMAudio("sounds/silence.mp3")
+            self.voice_client.play(silence_source)
 
-def setup(bot):
-    bot.add_cog(JoinSound(bot))
+# 非同期Cogセットアップ関数（main側で await bot.load_extension に対応）
+async def setup(bot):
+    await bot.add_cog(JoinSound(bot))
