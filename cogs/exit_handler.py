@@ -6,7 +6,7 @@ class ExitHandler(commands.Cog):
         self.bot = bot
 
         # ======== 設定項目 ========
-        self.TARGET_CATEGORY_ID = 123456789012345678  # ← テキストチャンネルのカテゴリIDを指定
+        self.TARGET_CATEGORY_ID = 1388730912396804106  # ← テキストチャンネルのカテゴリIDを指定
         self.TARGET_FORUM_IDS = [
             987654321098765432,  # ← フォーラムチャンネル1のID
             876543210987654321,  # ← フォーラムチャンネル2のID（必要に応じて追加）
@@ -21,8 +21,9 @@ class ExitHandler(commands.Cog):
         # ---- テキストカテゴリ内チャンネルのメッセージ削除 ----
         category = discord.utils.get(guild.categories, id=self.TARGET_CATEGORY_ID)
         if category:
-            for channel in category.text_channels:
-                await self.delete_user_messages(channel, member)
+            for channel in category.channels:
+                if isinstance(channel, discord.TextChannel):
+                    await self.delete_user_messages(channel, member)
         else:
             print(f"[ExitHandler] カテゴリID {self.TARGET_CATEGORY_ID} が見つかりませんでした。")
 
@@ -31,7 +32,7 @@ class ExitHandler(commands.Cog):
             forum = guild.get_channel(forum_id)
             if forum and isinstance(forum, discord.ForumChannel):
                 try:
-                    threads = await forum.threads()
+                    threads = forum.threads  # 非同期呼び出し不要
                     for thread in threads:
                         await self.delete_user_messages(thread, member)
                 except Exception as e:
