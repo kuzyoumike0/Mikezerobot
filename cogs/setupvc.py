@@ -4,12 +4,10 @@ from discord.ui import View, Button
 from datetime import datetime, timedelta, timezone
 from config import VC_CHANNEL_IDS, VC_CATEGORY_ID, SPECIAL_ROLE_ID, ALLOWED_TEXT_CHANNEL_ID
 
-
 # --------------------------
-# 削除ボタン付きビュー
+# チャンネル削除ボタンビュー
 # --------------------------
 class DeleteChannelButton(discord.ui.View):
-
     def __init__(self, channel: discord.TextChannel, author: discord.Member):
         super().__init__(timeout=None)
         self.channel = channel
@@ -21,15 +19,12 @@ class DeleteChannelButton(discord.ui.View):
             await interaction.response.send_message("チャンネルを削除します...", ephemeral=True)
             await self.channel.delete()
         else:
-            await interaction.response.send_message(
-                "削除できるのは、コマンド実行者または管理者のみです。", ephemeral=True)
-
+            await interaction.response.send_message("削除できるのは、コマンド実行者または管理者のみです。", ephemeral=True)
 
 # --------------------------
-# VC共有/個別選択ビュー
+# VCからのチャンネル作成選択ビュー（共有・個別）
 # --------------------------
 class VCChannelView(discord.ui.View):
-
     def __init__(self, bot: commands.Bot, author: discord.Member, vc_name: str):
         super().__init__(timeout=None)
         self.bot = bot
@@ -104,20 +99,16 @@ class VCChannelView(discord.ui.View):
 
         await interaction.response.send_message("個別チャンネルを作成しました：\n" + "\n".join(created_channels), ephemeral=False)
 
-
 # --------------------------
-# VC名選択ボタンビュー
+# VC選択ビュー
 # --------------------------
 class VCSelectorView(discord.ui.View):
-
     def __init__(self, bot, author):
         super().__init__(timeout=None)
         self.bot = bot
         self.author = author
-
         for vc_name in VC_CHANNEL_IDS:
             self.add_item(VCSelectButton(label=vc_name, vc_name=vc_name, bot=bot, author=author))
-
 
 class VCSelectButton(discord.ui.Button):
     def __init__(self, label, vc_name, bot, author):
@@ -133,12 +124,10 @@ class VCSelectButton(discord.ui.Button):
             ephemeral=True
         )
 
-
 # --------------------------
 # Cog定義
 # --------------------------
 class SetupVC(commands.Cog):
-
     def __init__(self, bot):
         self.bot = bot
 
@@ -148,7 +137,6 @@ class SetupVC(commands.Cog):
             await ctx.send("このチャンネルでは `!setupvc` コマンドは使用できません。", delete_after=10)
             return
         await ctx.send("どのVCを対象にしますか？", view=VCSelectorView(bot=self.bot, author=ctx.author))
-
 
 async def setup(bot):
     await bot.add_cog(SetupVC(bot))
