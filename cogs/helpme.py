@@ -53,5 +53,6 @@ class HelpMe(commands.Cog):
 
         await ctx.send(embed=embed)
 
-def setup(bot):
-    bot.add_cog(HelpMe(bot))
+# 🔧 discord.py 2.x 対応の setup（非同期）
+async def setup(bot):
+    await bot.add_cog(HelpMe(bot))
