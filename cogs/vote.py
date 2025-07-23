@@ -84,7 +84,12 @@ class Vote(commands.Cog):
         for option in data["options"]:
             result_text += f"・{option}: {data['votes'][option]}票\n"
 
-        await ctx.send(result_text)
+        try:
+            await ctx.author.send(result_text)
+            await ctx.send("📬 結果をDMに送信しました。")
+        except discord.Forbidden:
+            await ctx.send("DMを送信できませんでした。DMを受け取れる設定になっているか確認してください。")
+
         # 投票データ削除（任意）
         del vote_sessions[message_id]
 
