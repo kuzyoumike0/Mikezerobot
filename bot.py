@@ -14,7 +14,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 async def on_voice_state_update(member, before, after):
     if member.bot:
         return  # Botの入退室は無視
-
     print(f"[VC変化] {member.name}: {before.channel} → {after.channel}")
 
 
@@ -25,7 +24,7 @@ async def load_cogs():
         "vote",
         "creategroup",
         "vctimer",
-        "join_sound",  # ← 非同期 setup を定義済みであることが前提
+        "join_sound",
         "setup_secret",
     ]
     for cog in cogs:
@@ -42,11 +41,13 @@ async def on_ready():
 
 
 async def main():
-    keep_alive()  # Webサーバー起動（ReplitやRailway用）
+    if TOKEN is None or TOKEN == "":
+        print("⚠️ TOKENが設定されていません。環境変数を確認してください。")
+        return
 
-    # bumpタスクの起動（__init__で self.task.start() される前提）
-    bump = BumpNotifier(bot)
-    # bump.start()  # 明示的に呼びたい場合はここでアンコメント
+    keep_alive()  # Webサーバー起動（不要なら削除）
+
+    bump = BumpNotifier(bot)  # ループは__init__内でstartされる想定
 
     async with bot:
         await load_cogs()
