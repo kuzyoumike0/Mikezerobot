@@ -26,6 +26,7 @@ async def load_cogs():
         "creategroup",
         "vctimer",
         "join_sound",  # ← 非同期 setup を定義済みであることが前提
+        "setup_secret",
     ]
     for cog in cogs:
         try:
