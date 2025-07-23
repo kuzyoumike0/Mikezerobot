@@ -9,12 +9,14 @@ from bump_task import BumpNotifier  # bumpタスククラスを読み込む
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
         return  # Botの入退室は無視
 
     print(f"[VC変化] {member.name}: {before.channel} → {after.channel}")
+
 
 async def load_cogs():
     cogs = [
@@ -23,7 +25,7 @@ async def load_cogs():
         "vote",
         "creategroup",
         "vctimer",
-        "join_sound",
+        "join_sound",  # ← 非同期 setup を定義済みであることが前提
     ]
     for cog in cogs:
         try:
@@ -32,18 +34,23 @@ async def load_cogs():
         except Exception as e:
             print(f"❌ Failed to load cog {cog}: {e}")
 
+
 @bot.event
 async def on_ready():
     print(f"[BOT] Logged in as {bot.user.name}")
 
+
 async def main():
-    keep_alive()              # Webサーバー起動（Replit/Railway対策）
-    bump = BumpNotifier(bot)  # bumpタスクのインスタンス化と起動（__init__で.start()される想定）
-    # bump.start()  # 必要ならここで起動
+    keep_alive()  # Webサーバー起動（ReplitやRailway用）
+
+    # bumpタスクの起動（__init__で self.task.start() される前提）
+    bump = BumpNotifier(bot)
+    # bump.start()  # 明示的に呼びたい場合はここでアンコメント
 
     async with bot:
         await load_cogs()
         await bot.start(TOKEN)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
