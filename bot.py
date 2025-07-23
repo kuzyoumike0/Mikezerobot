@@ -5,7 +5,11 @@ from config import TOKEN
 import asyncio
 from keep_alive import keep_alive
 from bump_task import BumpNotifier  # bumpタスククラスを読み込む
+from dotenv import load_dotenv
+load_dotenv()
 
+import os
+TOKEN = os.getenv("TOKEN")
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
