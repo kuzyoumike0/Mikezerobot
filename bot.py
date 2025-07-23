@@ -26,6 +26,7 @@ async def load_cogs():
         "vctimer",
         "join_sound",
         "setup_secret",
+        "server_pet_channel",
     ]
     for cog in cogs:
         try:
