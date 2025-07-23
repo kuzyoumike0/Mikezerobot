@@ -23,8 +23,8 @@ async def load_cogs():
         "bump_reminder",
         "join_sound",
         "shutdown",       # ここにshutdown Cog
-        "restart"         # ここにrestart Cogを追加
-        "setup_secret"
+        "restart",         # ここにrestart Cogを追加
+        "setup_secret",
     ]
     for cog in cogs:
         try:
