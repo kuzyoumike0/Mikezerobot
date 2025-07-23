@@ -23,7 +23,7 @@ async def load_cogs():
         "vote",
         "creategroup",
         "vctimer",
-
+        "joinsound",
     ]
     for cog in cogs:
         try:
