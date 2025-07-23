@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "your-project-name"
+version = "0.1.0"
+description = "A short description"
+authors = ["Mike0 <sagirikuzyou@gmail.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+discord-py = "^2.3.2"
+flask = "^3.1.1"
+python-dotenv = "^1.1.1"
+vote = "^1.0.2"
+data = "^0.4"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

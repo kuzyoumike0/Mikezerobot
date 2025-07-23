@@ -1,0 +1,159 @@
+import discord
+from discord.ext import commands, tasks
+from discord.ui import Button, View
+import asyncio
+import datetime
+import os
+from keep_alive import keep_alive
+
+# Webサーバー起動（Replitのスリープ防止）
+keep_alive()
+
+# BotのIntent設定
+intents = discord.Intents.default()
+intents.message_content = True
+intents.members = True
+intents.guilds = True
+intents.voice_states = True
+
+# Botインスタンス作成
+bot = commands.Bot(command_prefix="!", intents=intents)
+
+# --- 変更してください ---
+CONFIRM_CHANNEL_ID = 1393019247864713226  # 脱退メンバー検知用チャンネルID
+BUMP_CHANNEL_ID = 1389328686192263238  # /bump通知チャンネルID
+VC_CHANNEL_ID = 1386201663446057102  # VCチャンネルID
+CATEGORY_ID = 1386195396480729159  # 作成先カテゴリID
+
+pending_deletions = {}
+
+
+@bot.event
+async def on_ready():
+    print(f"✅ Botログイン完了: {bot.user}")
+    scan_threads.start()
+    bump_reminder.start()
+
+
+# 脱退ユーザーのスレッド確認（10分おき）
+@tasks.loop(minutes=10)
+async def scan_threads():
+    for guild in bot.guilds:
+        for channel in guild.channels:
+            if isinstance(channel, discord.ForumChannel):
+                for thread in channel.threads:
+                    if thread.owner_id and not guild.get_member(
+                            thread.owner_id):
+                        confirm_channel = guild.get_channel(CONFIRM_CHANNEL_ID)
+                        if confirm_channel:
+                            embed = discord.Embed(
+                                title="🔍 脱退メンバーのフォーラム投稿を検出",
+                                description=f"スレッド: `{thread.name}`",
+                                color=discord.Color.orange())
+                            embed.add_field(name="作成者ID",
+                                            value=str(thread.owner_id),
+                                            inline=False)
+                            embed.add_field(name="スレッドID",
+                                            value=str(thread.id),
+                                            inline=False)
+                            embed.add_field(name="確認方法",
+                                            value="✅で削除、❌でスキップ",
+                                            inline=False)
+
+                            msg = await confirm_channel.send(embed=embed)
+                            await msg.add_reaction("✅")
+                            await msg.add_reaction("❌")
+                            pending_deletions[msg.id] = thread.id
+                            await asyncio.sleep(1)
+
+
+@bot.event
+async def on_raw_reaction_add(payload):
+    if payload.message_id not in pending_deletions:
+        return
+    if str(payload.emoji.name) not in ["✅", "❌"]:
+        return
+
+    guild = bot.get_guild(payload.guild_id)
+    if guild is None:
+        return
+    user = guild.get_member(payload.user_id)
+    if user is None or user.bot:
+        return
+
+    channel = bot.get_channel(payload.channel_id)
+    msg = await channel.fetch_message(payload.message_id)
+    thread_id = pending_deletions[payload.message_id]
+    thread = await guild.fetch_channel(thread_id)
+
+    if payload.emoji.name == "✅":
+        await thread.delete(reason="管理者の確認により削除")
+        await msg.reply(f"🗑 スレッド `{thread.name}` を削除しました")
+    elif payload.emoji.name == "❌":
+        await msg.reply(f"⏹ スレッド `{thread.name}` はスキップされました")
+
+    del pending_deletions[payload.message_id]
+
+
+# /bump通知（2時間ごと）
+@tasks.loop(hours=2)
+async def bump_reminder():
+    channel = bot.get_channel(BUMP_CHANNEL_ID)
+    if channel:
+        await channel.send("📢 `/bump` の時間です！忘れずにバンプしてください！")
+
+
+# VC参加者専用チャンネル作成ボタン
+class CreatePrivateVCChannelView(View):
+
+    @discord.ui.button(label="VCプライベートチャンネル作成",
+                       style=discord.ButtonStyle.green)
+    async def create_channel(self, interaction: discord.Interaction,
+                             button: Button):
+        guild = interaction.guild
+        vc_channel = guild.get_channel(VC_CHANNEL_ID)
+        category = guild.get_channel(CATEGORY_ID)
+
+        if not vc_channel or not category:
+            await interaction.response.send_message(
+                "⚠ VCチャンネルまたはカテゴリが見つかりません。", ephemeral=True)
+            return
+
+        members = vc_channel.members
+        if not members:
+            await interaction.response.send_message("⚠ VCに参加しているメンバーがいません。",
+                                                    ephemeral=True)
+            return
+
+        overwrites = {
+            guild.default_role:
+            discord.PermissionOverwrite(read_messages=False),
+            guild.me: discord.PermissionOverwrite(read_messages=True)
+        }
+        for member in members:
+            overwrites[member] = discord.PermissionOverwrite(
+                read_messages=True, send_messages=True)
+
+        today = datetime.datetime.now().strftime("vc-%Y-%m-%d")
+
+        channel = await guild.create_text_channel(name=today,
+                                                  overwrites=overwrites,
+                                                  category=category)
+
+        await interaction.response.send_message(
+            f"✅ チャンネル {channel.mention} を作成しました。", ephemeral=True)
+
+
+@bot.command()
+async def setup(ctx):
+    """VCプライベートチャンネル作成ボタンを表示"""
+    view = CreatePrivateVCChannelView()
+    await ctx.send("VC参加メンバーだけのプライベートチャンネルを作成します。下のボタンを押してください。", view=view)
+
+
+# 最後に一回だけ bot.run()
+bot.run(os.getenv("TOKEN"))
+
+git add .
+git commit -m "Pushテストのコメント追加"
+git push origin main
