@@ -24,6 +24,7 @@ async def load_cogs():
         "join_sound",
         "shutdown",       # ここにshutdown Cog
         "restart"         # ここにrestart Cogを追加
+        "setup_secret"
     ]
     for cog in cogs:
         try:
