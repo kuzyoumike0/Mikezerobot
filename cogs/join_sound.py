@@ -18,7 +18,7 @@ class JoinSound(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.voice_client = None
-        self.silence_task = None  # 無音ループ再生用タスク
+        self.silence_task = None
 
     @commands.command()
     async def joinvc(self, ctx):
@@ -26,22 +26,22 @@ class JoinSound(commands.Cog):
         if ctx.author.voice is None:
             await ctx.send("VCに入ってからコマンドを使ってください。")
             return
-        
+
         channel = ctx.author.voice.channel
         if self.voice_client and self.voice_client.is_connected():
             await self.voice_client.move_to(channel)
         else:
             self.voice_client = await channel.connect()
-        
+
         await ctx.send(f"{channel.name} に接続しました。")
 
-        # 無音ループ再生を開始（既にあればキャンセルして再起動）
         if self.silence_task and not self.silence_task.done():
             self.silence_task.cancel()
             try:
                 await self.silence_task
             except asyncio.CancelledError:
                 pass
+
         self.silence_task = asyncio.create_task(self.play_silence_loop())
 
     @commands.command()
@@ -66,7 +66,6 @@ class JoinSound(commands.Cog):
                     self.voice_client.stop()
                 source = discord.FFmpegPCMAudio(SOUNDS["silence"])
                 self.voice_client.play(source)
-                # 無音音源の秒数に合わせて調整してください（例: 5秒）
                 await asyncio.sleep(5)
         except asyncio.CancelledError:
             pass
@@ -88,7 +87,7 @@ class JoinSound(commands.Cog):
     async def play_se_for_time(self):
         if not self.voice_client or not self.voice_client.is_connected():
             return
-        
+
         now = datetime.datetime.now(JST)
         hour = now.hour
 
@@ -104,7 +103,7 @@ class JoinSound(commands.Cog):
         try:
             if self.voice_client.is_playing():
                 self.voice_client.stop()
-            
+
             source = discord.FFmpegPCMAudio(se)
 
             def after_play(error):
