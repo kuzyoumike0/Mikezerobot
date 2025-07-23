@@ -6,7 +6,7 @@ class ExitHandler(commands.Cog):
         self.bot = bot
 
         # ======== 設定項目 ========
-        self.TARGET_CATEGORY_ID = 1392965873261609110  # ← テキストチャンネルのカテゴリIDを指定
+        self.TARGET_CATEGORY_ID = 1388730912396804106  # ← テキストチャンネルのカテゴリIDを指定
         self.TARGET_FORUM_IDS = [
             987654321098765432,  # ← フォーラムチャンネル1のID
             876543210987654321,  # ← フォーラムチャンネル2のID（必要に応じて追加）
