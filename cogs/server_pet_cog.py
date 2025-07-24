@@ -5,3 +5,6 @@ bot = commands.Bot(command_prefix="!", intents=intents)
 @commands.command()
 async def test(ctx):
     await ctx.send("Botコマンドは動いています！")
+
+def setup(bot):
+    bot.add_cog(YourCogName(bot))
