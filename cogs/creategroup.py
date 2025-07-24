@@ -10,7 +10,7 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 class CreateGroupView(View):
     def __init__(self, channel_name, message=None):
         super().__init__(timeout=None)
-        self.channel_name = channel_name.lower().replace(" ", "-")  # チャンネル名をスラッグ化
+        self.channel_name = channel_name.lower().replace(" ", "-")
         self.participants = set()
         self.message = message
 
@@ -62,11 +62,15 @@ class CreateGroup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.bot.loop.create_task(self.load_persistent_views())
+        print("[CreateGroup] Cog initialized and persistent views loading task started.")
 
     @commands.command()
     async def creategroup(self, ctx, *, channel_name: str):
+        print(f"[creategroup] コマンドが呼ばれました。channel_name={channel_name} チャンネルID={ctx.channel.id}")
+
         if ctx.channel.id not in CREATEGROUP_ALLOWED_CHANNELS:
             await ctx.send("このチャンネルではこのコマンドは使えません。")
+            print("[creategroup] コマンド使用不可のチャンネルからの呼び出し。")
             return
 
         view = CreateGroupView(channel_name)
@@ -78,8 +82,10 @@ class CreateGroup(commands.Cog):
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                print("[creategroup] persistent_views.json 読み込み成功")
         except (FileNotFoundError, json.JSONDecodeError):
             data = {}
+            print("[creategroup] persistent_views.json が存在しないか壊れているため新規作成")
 
         if "creategroup" not in data:
             data["creategroup"] = []
@@ -93,35 +99,40 @@ class CreateGroup(commands.Cog):
         os.makedirs(os.path.dirname(PERSISTENT_VIEWS_PATH), exist_ok=True)
         with open(PERSISTENT_VIEWS_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
+            print("[creategroup] persistent_views.json に書き込み完了")
 
     async def load_persistent_views(self):
         await self.bot.wait_until_ready()
+        print("[load_persistent_views] Bot起動完了。永続ビューをロード開始")
+
         if not os.path.exists(PERSISTENT_VIEWS_PATH):
+            print("[load_persistent_views] persistent_views.json が存在しません。終了。")
             return
 
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
+                print("[load_persistent_views] persistent_views.json 読み込み成功")
         except json.JSONDecodeError:
+            print("[load_persistent_views] persistent_views.json が壊れています。終了。")
             return
 
         entries = data.get("creategroup", [])
         for entry in entries:
             channel = self.bot.get_channel(entry["channel_id"])
-            if channel:
-                try:
-                    message = await channel.fetch_message(entry["message_id"])
-                    view = CreateGroupView(entry["channel_name"], message)
-                    self.bot.add_view(view)
-                except discord.NotFound:
-                    continue
-
-        @commands.command()
-async def creategroup(self, ctx, *, channel_name: str):
-    print(f"creategroupコマンドが呼ばれました。channel_name={channel_name}")
-    await ctx.send(f"グループ作成コマンド受け付けました: {channel_name}")
-
+            if channel is None:
+                print(f"[load_persistent_views] チャンネルID {entry['channel_id']} が見つかりません。スキップ")
+                continue
+            try:
+                message = await channel.fetch_message(entry["message_id"])
+                view = CreateGroupView(entry["channel_name"], message)
+                self.bot.add_view(view)
+                print(f"[load_persistent_views] メッセージID {entry['message_id']} のビューを追加しました。")
+            except discord.NotFound:
+                print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
+                continue
 
 
 async def setup(bot):
     await bot.add_cog(CreateGroup(bot))
+    print("[setup] CreateGroup Cog を読み込みました。")
