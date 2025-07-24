@@ -3,11 +3,11 @@ from discord.ext import commands
 from discord.ui import View, Button
 import json
 import os
+
 from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_PATH
 
 
 class CreateGroupView(View):
-
     def __init__(self, channel_name, message=None):
         super().__init__(timeout=None)
         self.channel_name = channel_name
@@ -59,9 +59,9 @@ class CreateGroupView(View):
 
 
 class CreateGroup(commands.Cog):
-
     def __init__(self, bot):
         self.bot = bot
+        self.bot.loop.create_task(self.load_persistent_views())
 
     @commands.command()
     async def creategroup(self, ctx, *, channel_name: str):
@@ -74,7 +74,7 @@ class CreateGroup(commands.Cog):
             f"「{channel_name}」に参加する人はボタンをクリックしてください： 参加者数: 0", view=view)
         view.message = message
 
-        # persistent_views.json に保存
+        # 永続ビューに登録
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -93,6 +93,21 @@ class CreateGroup(commands.Cog):
         with open(PERSISTENT_VIEWS_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
+    async def load_persistent_views(self):
+        await self.bot.wait_until_ready()
+        if not os.path.exists(PERSISTENT_VIEWS_PATH):
+            return
 
-async def setup(bot):
-    await bot.add_cog(CreateGroup(bot))
+        try:
+            with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            return
+
+        entries = data.get("creategroup", [])
+        for entry in entries:
+            channel = self.bot.get_channel(entry["channel_id"])
+            if channel:
+                try:
+                    message = await channel.fetch_message(entry["message_id"])
+                    view = CreateGroupView(entry["channel_name"], messag_]()
