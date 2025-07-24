@@ -77,8 +77,9 @@ class MysteryGame(commands.Cog):
         else:
             await ctx.send(f"❌ 不正解… {ctx.author.mention}")
 
-    @commands.command(name="helpme")
-    async def helpme(self, ctx):
+    # 変更: helpmeコマンドをmystery_helpに変更
+    @commands.command(name="mystery_help")
+    async def mystery_help(self, ctx):
         embed = discord.Embed(
             title="📘 推理・謎解きBot コマンド一覧",
             color=discord.Color.teal()
