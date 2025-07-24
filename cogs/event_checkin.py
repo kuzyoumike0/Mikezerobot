@@ -6,9 +6,9 @@ from collections import defaultdict
 EVENT_DATA_FILE = "event_data.csv"
 
 REACTION_OPTIONS = {
-    "🟡": "朝の部",
-    "🟢": "昼の部",
-    "🔵": "夜の部",
+    "🌅": "朝の部",
+    "☀️": "昼の部",
+    "🌙": "夜の部",
     "📣": "中締め"
 }
 
@@ -116,7 +116,6 @@ class EventCheckin(commands.Cog):
                         writer.writerow([event_id, date, title, name])
 
         await ctx.send(file=discord.File(EVENT_DATA_FILE))
-
 
 def setup(bot):
     bot.add_cog(EventCheckin(bot))
