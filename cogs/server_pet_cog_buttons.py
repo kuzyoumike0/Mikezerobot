@@ -52,56 +52,66 @@ class FoodButton(Button):
         self.food_type = label
 
     async def callback(self, interaction: discord.Interaction):
-        server_id = str(interaction.guild.id)
-        user_id = str(interaction.user.id)
-        now = datetime.datetime.utcnow()
+        try:
+            server_id = str(interaction.guild.id)
+            user_id = str(interaction.user.id)
+            now = datetime.datetime.utcnow()
 
-        pet_data = load_pet_data()
-        if server_id not in pet_data:
-            await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True)
-            return
+            pet_data = load_pet_data()
+            if server_id not in pet_data:
+                await interaction.response.send_message(
+                    "⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True
+                )
+                return
 
-        last_fed_by = pet_data[server_id].get("last_fed_by", {}).get(user_id, "1970-01-01T00:00:00")
-        last_fed_time = datetime.datetime.fromisoformat(last_fed_by)
+            last_fed_by = pet_data[server_id].get("last_fed_by", {}).get(user_id, "1970-01-01T00:00:00")
+            last_fed_time = datetime.datetime.fromisoformat(last_fed_by)
 
-        if (now - last_fed_time).total_seconds() < 3600:
-            await interaction.response.send_message("⏳ あなたはまだ餌を与えられません。1時間に1回だけです。", ephemeral=True)
-            return
+            if (now - last_fed_time).total_seconds() < 3600:
+                await interaction.response.send_message(
+                    "⏳ あなたはまだ餌を与えられません。1時間に1回だけです。", ephemeral=True
+                )
+                return
 
-        # 経験値を加算
-        pet_data[server_id]["exp"] += FOOD_VALUES[self.food_type]
-        pet_data[server_id]["last_fed_by"][user_id] = now.isoformat()
+            # 経験値を加算
+            pet_data[server_id]["exp"] += FOOD_VALUES[self.food_type]
+            pet_data[server_id]["last_fed_by"][user_id] = now.isoformat()
 
-        exp = pet_data[server_id]["exp"]
-        level = get_pet_level(exp)
-        image_filename = f"level{level}_pet.png"
-        image_path = os.path.join(PET_IMAGES_PATH, image_filename)
+            exp = pet_data[server_id]["exp"]
+            level = get_pet_level(exp)
+            image_filename = f"level{level}_pet.png"
+            image_path = os.path.join(PET_IMAGES_PATH, image_filename)
 
-        save_pet_data(pet_data)
+            save_pet_data(pet_data)
 
-        embed = discord.Embed(title="🐶 サーバーペットの様子", color=discord.Color.green())
-        embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
+            embed = discord.Embed(title="🐶 サーバーペットの様子", color=discord.Color.green())
+            embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
 
-        view = View()
-        for food in FOOD_VALUES:
-            view.add_item(FoodButton(food, self.bot))
+            view = View()
+            for food in FOOD_VALUES:
+                view.add_item(FoodButton(food, self.bot))
 
-        if os.path.exists(image_path):
-            file = discord.File(image_path, filename=image_filename)
-            embed.set_image(url=f"attachment://{image_filename}")
-            await interaction.response.send_message(
-                content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
-                embed=embed,
-                file=file,
-                view=view
-            )
-        else:
-            embed.description = "⚠️ ペットの画像が見つかりません。"
-            await interaction.response.send_message(
-                content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
-                embed=embed,
-                view=view
-            )
+            if os.path.exists(image_path):
+                file = discord.File(image_path, filename=image_filename)
+                await interaction.response.send_message(
+                    content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
+                    embed=embed,
+                    file=file,
+                    view=view
+                )
+            else:
+                embed.description = "⚠️ ペットの画像が見つかりません。"
+                await interaction.response.send_message(
+                    content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
+                    embed=embed,
+                    view=view
+                )
+        except Exception as e:
+            print(f"[ERROR] Interaction callback error: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message(
+                    "⚠️ エラーが発生しました。管理者に連絡してください。", ephemeral=True
+                )
 
 # メインのCog定義
 class PetCog(commands.Cog):
