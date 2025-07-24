@@ -1,3 +1,9 @@
+import discord
+from discord.ext import commands
+import os
+import json
+import asyncio
+
 class ServerPetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -14,12 +20,44 @@ class ServerPetCog(commands.Cog):
             range(20, 1000): "https://example.com/images/pet_level4.png",
         }
 
+    def load_data(self):
+        if os.path.exists(self.data_file):
+            with open(self.data_file, "r", encoding="utf-8") as f:
+                self.pets = json.load(f)
+        else:
+            self.pets = {}
+
+    def save_data(self):
+        with open(self.data_file, "w", encoding="utf-8") as f:
+            json.dump(self.pets, f, indent=4, ensure_ascii=False)
+
+    def ensure_pet(self, guild_id):
+        gid = str(guild_id)
+        if gid not in self.pets:
+            self.pets[gid] = {
+                "name": "サーバーペット",
+                "level": 1,
+                "exp": 0,
+                "hunger": 50,
+                "happiness": 50
+            }
+            self.save_data()
+
     def get_pet_image(self, level):
         for level_range, url in self.level_images.items():
             if level in level_range:
                 return url
-        # デフォルト画像
         return "https://example.com/images/pet_default.png"
+
+    async def get_or_create_pet_channel(self, guild: discord.Guild):
+        channel = discord.utils.get(guild.text_channels, name=self.channel_name)
+        if channel is None:
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=True, send_messages=False),
+                guild.me: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+            }
+            channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites)
+        return channel
 
     @commands.group(name="pet", invoke_without_command=True)
     async def pet(self, ctx):
@@ -41,3 +79,6 @@ class ServerPetCog(commands.Cog):
         channel = await self.get_or_create_pet_channel(ctx.guild)
         await channel.send(embed=embed)
         await ctx.send(f"{channel.mention} にペットの状態を表示しました。")
+
+def setup(bot):
+    bot.add_cog(ServerPetCog(bot))
