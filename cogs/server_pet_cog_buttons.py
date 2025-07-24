@@ -6,7 +6,7 @@ import os
 import datetime
 
 # 設定ファイルから読み込み
-from config import PET_HELP_CHANNEL_ID, PET_RANKING_CHANNEL_ID, FEED_TITLE_ROLES
+from config import PET_HELP_CHANNEL_ID, PET_RANKING_CHANNEL_ID, PET_COMMAND_CHANNEL_ID, FEED_TITLE_ROLES
 
 # ファイルパス設定
 PET_DATA_PATH = "data/pets.json"
@@ -175,6 +175,11 @@ class PetCog(commands.Cog):
 
     @commands.command(name="pet")
     async def pet_command(self, ctx):
+        # !petコマンドを特定チャンネルに制限する場合の例
+        if ctx.channel.id != PET_COMMAND_CHANNEL_ID:
+            await ctx.send(f"⚠️ このコマンドは <#{PET_COMMAND_CHANNEL_ID}> チャンネルでのみ使用可能です。")
+            return
+
         server_id = str(ctx.guild.id)
         user_id = str(ctx.author.id)
         pet_data = load_pet_data()
