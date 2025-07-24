@@ -5,7 +5,7 @@ import json
 import os
 import datetime
 
-# 設定ファイルパス
+# ファイルパス設定
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
@@ -16,7 +16,7 @@ FOOD_VALUES = {
     "もちもち": 10,
 }
 
-# 経験値→レベル変換
+# 経験値→レベル変換しきい値
 LEVEL_THRESHOLDS = {
     1: 0,
     2: 100,
@@ -24,31 +24,34 @@ LEVEL_THRESHOLDS = {
     4: 300,
 }
 
-# フィード数に応じたロール（称号）
+# 餌やり回数に応じたロールID（称号）
 FEED_TITLE_ROLES = {
     10: 1397793352396574720,  # 10回
     30: 1397793748926201886,  # 30回
     50: 1397794033236971601,  # 50回
 }
 
+# レベル取得関数
 def get_pet_level(exp: int):
     for level in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
         if exp >= LEVEL_THRESHOLDS[level]:
             return level
     return 1
 
+# ペットデータ読み込み
 def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
         return {}
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
+# ペットデータ保存
 def save_pet_data(data):
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# ロール管理（付与・削除）
+# 称号ロールの更新
 async def update_feed_roles(member: discord.Member, feed_count: int):
     try:
         for threshold, role_id in FEED_TITLE_ROLES.items():
@@ -65,6 +68,7 @@ async def update_feed_roles(member: discord.Member, feed_count: int):
     except Exception as e:
         print(f"[ERROR] ロール更新失敗: {e}")
 
+# 餌やりボタン
 class FoodButton(Button):
     def __init__(self, label, bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
@@ -133,6 +137,7 @@ class FoodButton(Button):
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ エラーが発生しました。管理者に連絡してください。", ephemeral=True)
 
+# ペット機能全体
 class PetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -178,6 +183,31 @@ class PetCog(commands.Cog):
             embed.description = "⚠️ ペットの画像が見つかりません。"
             await ctx.send(embed=embed, view=view)
 
+    @commands.command(name="pet_ranking")
+    async def pet_ranking_command(self, ctx):
+        server_id = str(ctx.guild.id)
+        pet_data = load_pet_data()
+
+        if server_id not in pet_data or "feed_count" not in pet_data[server_id]:
+            await ctx.send("⚠️ まだ餌をあげたユーザーがいません。")
+            return
+
+        feed_counts = pet_data[server_id]["feed_count"]
+        sorted_feed = sorted(feed_counts.items(), key=lambda x: x[1], reverse=True)
+
+        embed = discord.Embed(
+            title="🏆 餌やりランキング",
+            description="上位の餌やり名人たち！",
+            color=discord.Color.gold()
+        )
+
+        for idx, (user_id, count) in enumerate(sorted_feed[:10], start=1):
+            member = ctx.guild.get_member(int(user_id))
+            name = member.display_name if member else f"ユーザーID:{user_id}"
+            embed.add_field(name=f"{idx}位: {name}", value=f"{count} 回", inline=False)
+
+        await ctx.send(embed=embed)
+
     @tasks.loop(minutes=1)
     async def update_pet_image(self):
         now = datetime.datetime.utcnow()
@@ -197,5 +227,6 @@ class PetCog(commands.Cog):
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
 
+# コグ登録
 async def setup(bot: commands.Bot):
     await bot.add_cog(PetCog(bot))
