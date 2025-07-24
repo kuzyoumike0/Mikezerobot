@@ -84,7 +84,7 @@ class FoodButton(Button):
 
             save_pet_data(pet_data)
 
-            embed = discord.Embed(title="🐶 サーバーペットの様子", color=discord.Color.green())
+            embed = discord.Embed(title="🐶 ミルクシュガーの様子だよ", color=discord.Color.green())
             embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
 
             view = View()
