@@ -34,12 +34,26 @@ IMAGE_FILES = {
     "ふわふわ": "pet_fuwafuwa.png",
 }
 
+# 1時間クールダウン対象のアクション（餌＋散歩、撫でる）
+COOLDOWN_ACTIONS = {
+    "キラキラ": "last_feed_",
+    "カチカチ": "last_feed_",
+    "もちもち": "last_feed_",
+    "ふわふわ": "last_feed_",
+    "散歩": "last_walk_",
+    "撫でる": "last_pat_",
+}
+
 # ペットデータ読み込み
 def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
         return {}
-    with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    try:
+        with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (json.JSONDecodeError, OSError) as e:
+        print(f"[ERROR] pets.json 読み込み失敗: {e}")
+        return {}
 
 # ペットデータ保存
 def save_pet_data(data):
@@ -55,7 +69,11 @@ def check_and_update_evolution(pet_data, guild_id):
 
     now = datetime.datetime.utcnow()
     last_change_str = data.get("last_image_change", "1970-01-01T00:00:00")
-    last_change = datetime.datetime.fromisoformat(last_change_str)
+    try:
+        last_change = datetime.datetime.fromisoformat(last_change_str)
+    except ValueError:
+        last_change = datetime.datetime(1970, 1, 1)
+
     if (now - last_change).total_seconds() < 3600:
         return
 
@@ -96,26 +114,31 @@ class ActionButton(Button):
             pet_data = load_pet_data()
 
             if guild_id not in pet_data:
-                await interaction.response.send_message("⚠️ ペットがまだ生成されていません。!petコマンドで開始してください。", ephemeral=True)
+                await interaction.response.send_message(
+                    "⚠️ ペットがまだ生成されていません。!petコマンドで開始してください。", ephemeral=True)
                 return
 
-            # 餌の場合はユーザー単位で1時間に1回まで制限
-            if self.action in IMAGE_FILES.keys():
-                cooldown_key = f"last_feed_{user_id}"
+            # クールダウンチェック（餌・散歩・撫でる共通で1時間に1回まで）
+            if self.action in COOLDOWN_ACTIONS:
+                cooldown_key_prefix = COOLDOWN_ACTIONS[self.action]
+                cooldown_key = f"{cooldown_key_prefix}{user_id}"
                 last_time_str = pet_data[guild_id].get(cooldown_key, "1970-01-01T00:00:00")
-                last_time = datetime.datetime.fromisoformat(last_time_str)
+                try:
+                    last_time = datetime.datetime.fromisoformat(last_time_str)
+                except ValueError:
+                    last_time = datetime.datetime(1970, 1, 1)
+
                 if (now - last_time).total_seconds() < 3600:
-                    await interaction.response.send_message(f"⏳ 餌は1時間に1回だけあげられます。", ephemeral=True)
+                    await interaction.response.send_message(
+                        f"⏳ 「{self.action}」は1時間に1回だけ行えます。", ephemeral=True)
                     return
                 pet_data[guild_id][cooldown_key] = now.isoformat()
-            else:
-                pass
 
             # 経験値加算
             exp_add = ACTION_EXP.get(self.action, 0)
             pet_data[guild_id]["exp"] = pet_data[guild_id].get("exp", 0) + exp_add
 
-            # 餌カウント増加
+            # 餌カウント増加（餌アクションのみ）
             if self.action in IMAGE_FILES.keys():
                 key = f"feed_{self.action}"
                 pet_data[guild_id][key] = pet_data[guild_id].get(key, 0) + 1
@@ -293,7 +316,10 @@ class PetCog(commands.Cog):
         updated = False
         now = datetime.datetime.utcnow()
         for guild_id, data in pet_data.items():
-            last_change = datetime.datetime.fromisoformat(data.get("last_image_change","1970-01-01T00:00:00"))
+            try:
+                last_change = datetime.datetime.fromisoformat(data.get("last_image_change","1970-01-01T00:00:00"))
+            except ValueError:
+                last_change = datetime.datetime(1970, 1, 1)
             if (now - last_change).total_seconds() >= 10800:
                 data["last_image_change"] = now.isoformat()
                 updated = True
