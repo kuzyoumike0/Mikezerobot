@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-from config import MYSTERY_CHANNEL_ID, MYSTERY_SET_CHANNEL_ID  # チャンネル指定用（出題用とセット用）
+from config import MYSTERY_CHANNEL_ID, MYSTERY_SET_CHANNEL_ID  # 出題・登録用チャンネルID
 
 DATA_PATH = "data/mysteries.json"
 
@@ -25,7 +25,7 @@ class MysteryGame(commands.Cog):
 
     @commands.command(name="mystery")
     async def show_mystery(self, ctx):
-        """現在の謎を表示（指定チャンネルに投稿）"""
+        """現在の謎を指定チャンネルに表示します。"""
         data = load_mystery_data()
         current = data["current"]
         if not current:
@@ -37,11 +37,11 @@ class MysteryGame(commands.Cog):
             description=current['question'],
             color=discord.Color.dark_blue()
         )
-        embed.set_footer(text="答えが分かったら `/answer <答え>`")
+        embed.set_footer(text="答えが分かったら `!answer <答え>`")
 
         channel = self.bot.get_channel(MYSTERY_CHANNEL_ID)
         if channel is None:
-            await ctx.send("⚠️ 指定されたチャンネルが見つかりません。")
+            await ctx.send("⚠️ 出題チャンネルが見つかりません。config.py を確認してください。")
             return
 
         await channel.send(embed=embed)
@@ -49,7 +49,7 @@ class MysteryGame(commands.Cog):
 
     @commands.command(name="answer")
     async def answer(self, ctx, *, user_answer: str):
-        """謎への回答を送信します"""
+        """謎への回答を送信します。正誤判定されます。"""
         data = load_mystery_data()
         current = data["current"]
         if not current:
@@ -71,8 +71,7 @@ class MysteryGame(commands.Cog):
     @commands.command(name="set_mystery")
     @commands.has_permissions(administrator=True)
     async def set_mystery(self, ctx, title: str, answer: str, *, question: str):
-        """管理者用：新しい謎をセットし、指定チャンネルに出題"""
-        # 実行チャンネルをチェック
+        """管理者用：新しい謎をセットして出題します。"""
         if ctx.channel.id != MYSTERY_SET_CHANNEL_ID:
             await ctx.send(f"❌ このコマンドは <#{MYSTERY_SET_CHANNEL_ID}> チャンネルでのみ実行可能です。")
             return
@@ -94,22 +93,31 @@ class MysteryGame(commands.Cog):
             description=question,
             color=discord.Color.purple()
         )
-        embed.set_footer(text="答えが分かったら `/answer <答え>`")
+        embed.set_footer(text="答えが分かったら `!answer <答え>`")
 
         channel = self.bot.get_channel(MYSTERY_CHANNEL_ID)
         if channel:
             await channel.send(embed=embed)
             await ctx.send(f"📨 謎を <#{MYSTERY_CHANNEL_ID}> に出題しました。")
         else:
-            await ctx.send("⚠️ 謎はセットされましたが、出題用チャンネルが見つかりません。")
+            await ctx.send("⚠️ 謎はセットされましたが、出題チャンネルが見つかりません。")
+
+    @set_mystery.error
+    async def set_mystery_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("⚠️ このコマンドを実行するには管理者権限が必要です。")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("❌ 引数が不足しています。`!set_mystery <タイトル> <正解> <問題文>` の形式で入力してください。")
+        else:
+            await ctx.send(f"⚠️ コマンド実行中にエラーが発生しました：{error}")
 
     @commands.command(name="close_mystery")
     @commands.has_permissions(administrator=True)
     async def close_mystery(self, ctx):
-        """現在の謎を終了"""
+        """現在の謎を終了させます。"""
         data = load_mystery_data()
         if not data["current"]:
-            await ctx.send("現在アクティブな謎はありません。")
+            await ctx.send("🔒 現在アクティブな謎はありません。")
             return
         data["current"] = None
         save_mystery_data(data)
@@ -117,13 +125,12 @@ class MysteryGame(commands.Cog):
 
     @commands.command(name="helpme_mystery")
     async def helpme_mystery(self, ctx):
-        """このCogで使用可能なコマンド一覧を表示します"""
+        """このCogで使用できるコマンド一覧を表示します。"""
         embed = discord.Embed(
             title="🔎 MysteryGame コマンド一覧",
             description="このBotで利用できる謎解き関連コマンドです。",
             color=discord.Color.teal()
         )
-
         embed.add_field(
             name="!mystery",
             value="現在出題中の謎を表示（指定チャンネルに投稿）",
@@ -134,10 +141,9 @@ class MysteryGame(commands.Cog):
             value="謎への回答を送信（正誤判定あり）",
             inline=False
         )
-
         embed.add_field(
             name="!set_mystery <タイトル> <正解> <問題文>",
-            value=f"🛠 管理者専用：新しい謎を登録して出題（<{MYSTERY_SET_CHANNEL_ID}> チャンネルでのみ使用可）",
+            value=f"🛠 管理者専用：新しい謎を登録して出題（<#{MYSTERY_SET_CHANNEL_ID}> チャンネル限定）",
             inline=False
         )
         embed.add_field(
@@ -145,10 +151,9 @@ class MysteryGame(commands.Cog):
             value="🛠 管理者専用：現在の謎を締め切る",
             inline=False
         )
-
         embed.set_footer(text="※ 謎は定期的に更新されます。出題内容を見逃すな！")
-
         await ctx.send(embed=embed)
 
+# Bot にこの Cog を登録
 async def setup(bot):
     await bot.add_cog(MysteryGame(bot))
