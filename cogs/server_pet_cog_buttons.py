@@ -253,6 +253,19 @@ class PetCog(commands.Cog):
 
         await ctx.send(embed=embed)
 
+    @commands.command(name="pet_help")
+    async def pet_help_command(self, ctx):
+        embed = discord.Embed(
+            title="🐶 ペットコマンド一覧",
+            description=(
+                "`!pet` - ペットの状態を表示し、餌やり・散歩・撫でるボタンを表示します。\n"
+                "`!pet_ranking` - サーバー内の餌やりランキングを表示します。\n"
+                "`!pet_help` - このコマンド一覧を表示します。"
+            ),
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
     @tasks.loop(minutes=1)
     async def update_pet_image(self):
         now = datetime.datetime.utcnow()
