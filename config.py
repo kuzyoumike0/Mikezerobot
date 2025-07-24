@@ -49,6 +49,9 @@ MOD_ROLE_ID = 1385323031047438437
 # creategroupコマンドを許可するテキストチャンネルIDリスト
 CREATEGROUP_ALLOWED_CHANNELS = [1385323336699219979, 1386584590289866814]
 
+# mysteryコマンドを許可するテキストチャンネルIDリスト
+MYSTERY_CHANNEL_ID = 1397863394064994395
+
 # 時間帯ごとの入室音ファイル名（プロジェクトルートに配置）
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",   # 05:00 ～ 11:59
