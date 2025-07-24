@@ -1,5 +1,3 @@
-# event_checkin.py（cogs/event_checkin.py）
-
 import discord
 from discord.ext import commands
 import csv
@@ -20,7 +18,7 @@ class EventCheckin(commands.Cog):
         self.bot = bot
         self.events = {}
 
-    @commands.command(name="set_event")  # ← コマンド名には '!' を含めない
+    @commands.command(name="set_event")
     async def set_event(self, ctx, year: str, month: str, day: str, *, title: str):
         date_str = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         event_id = f"{date_str}_{title}"
@@ -98,7 +96,7 @@ class EventCheckin(commands.Cog):
             embed.add_field(name=f"{emoji} {label}", value=f"{count}人", inline=False)
         await message.edit(embed=embed)
 
-       @commands.command(name="export_csv")
+    @commands.command(name="export_csv")
     async def export_csv(self, ctx):
         if not self.events:
             await ctx.send("エクスポートするイベントがありません。")
@@ -117,7 +115,6 @@ class EventCheckin(commands.Cog):
                         writer.writerow([event_id, date, title, name])
 
         await ctx.send(file=discord.File(EVENT_DATA_FILE))
-
 
 def setup(bot):
     bot.add_cog(EventCheckin(bot))
