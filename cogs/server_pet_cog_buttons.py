@@ -6,7 +6,7 @@ import os
 import datetime
 
 DATA_FILE = "server_pet_data.json"
-IMAGE_FOLDER = "images"  # 画像フォルダ。bot起動ディレクトリからの相対パス
+IMAGE_FOLDER = "images"  # 画像フォルダのパス
 
 class FeedButton(Button):
     def __init__(self, label: str, style: discord.ButtonStyle, cog):
@@ -24,12 +24,11 @@ class ServerPetCogButtons(commands.Cog):
         self.load_data()
 
         self.feed_exp = {
-            "キラキラ": 10,
+            "キラキラ": 15,
             "カチカチ": 10,
-            "もちもち": 10,
+            "もちもち": 5,
         }
 
-        # 経験値の閾値と画像ファイル名の設定
         self.level_images = [
             (0, 49, "pet_level1.png"),
             (50, 99, "pet_level2.png"),
@@ -90,19 +89,20 @@ class ServerPetCogButtons(commands.Cog):
         channel = await self.get_or_create_pet_channel(guild)
 
         image_path = os.path.join(IMAGE_FOLDER, pet["current_image"])
+        image_exists = os.path.isfile(image_path)
 
         embed = discord.Embed(
-            title="サーバーのペットの状態",
+            title=f"サーバーのペットの状態",
             description=f"経験値: {pet['exp']}",
             color=discord.Color.blue()
         )
 
-        if os.path.isfile(image_path):
+        file = None
+        if image_exists:
             file = discord.File(image_path, filename=pet["current_image"])
             embed.set_image(url=f"attachment://{pet['current_image']}")
         else:
-            embed.description += "\n\n⚠️ ペットの画像がありません。"
-            file = None
+            embed.add_field(name="⚠️画像エラー", value="ペットの画像がありません", inline=False)
 
         view = View(timeout=None)
         for feed_name in self.feed_exp.keys():
@@ -165,7 +165,7 @@ class ServerPetCogButtons(commands.Cog):
 
     @commands.command(name="pet")
     async def pet_status(self, ctx):
-        """サーバーのペットの状態をテキストチャンネルに表示する"""
+        """サーバーのペットの状態を表示する"""
         self.ensure_guild_pet(ctx.guild.id)
         await self.update_pet_message(ctx.guild)
 
