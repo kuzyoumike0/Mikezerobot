@@ -6,7 +6,7 @@ import os
 import datetime
 
 DATA_FILE = "server_pet_data.json"
-IMAGE_FOLDER = "images"  # bot起動ディレクトリからの相対パス
+IMAGE_FOLDER = "images"  # 画像フォルダ。bot起動ディレクトリからの相対パス
 
 class FeedButton(Button):
     def __init__(self, label: str, style: discord.ButtonStyle, cog):
@@ -14,7 +14,6 @@ class FeedButton(Button):
         self.cog = cog
 
     async def callback(self, interaction: discord.Interaction):
-        # ボタン押下時に餌をあげる処理を呼ぶ
         await self.cog.feed_pet(interaction, self.label)
 
 class ServerPetCogButtons(commands.Cog):
@@ -24,14 +23,13 @@ class ServerPetCogButtons(commands.Cog):
         self.pets = {}
         self.load_data()
 
-        # 餌の種類と経験値増加量
         self.feed_exp = {
-            "キラキラ": 15,
+            "キラキラ": 10,
             "カチカチ": 10,
-            "もちもち": 5,
+            "もちもち": 10,
         }
 
-        # 経験値の範囲と対応画像ファイル名
+        # 経験値の閾値と画像ファイル名の設定
         self.level_images = [
             (0, 49, "pet_level1.png"),
             (50, 99, "pet_level2.png"),
@@ -42,11 +40,9 @@ class ServerPetCogButtons(commands.Cog):
         self.image_change_interval = datetime.timedelta(hours=3)
         self.feed_cooldown = datetime.timedelta(hours=1)
 
-        # 画像更新の定期タスク開始
         self.image_update_task.start()
 
     def cog_unload(self):
-        # コグアンロード時にタスクを止める
         self.image_update_task.cancel()
 
     def load_data(self):
@@ -95,33 +91,23 @@ class ServerPetCogButtons(commands.Cog):
 
         image_path = os.path.join(IMAGE_FOLDER, pet["current_image"])
 
-        # --- デバッグ用ログ ---
-        print(f"[DEBUG] update_pet_message: image_path = {image_path}")
-        print(f"[DEBUG] image exists: {os.path.isfile(image_path)}")
-        # -------------------
-
-        if not os.path.isfile(image_path):
-            # 画像がない場合は画像なしで送信（または画像ファイルを確認すること）
-            print("[WARNING] 画像ファイルが見つかりません: " + image_path)
-            image_path = None
-
         embed = discord.Embed(
-            title=f"サーバーのペットの状態",
+            title="サーバーのペットの状態",
             description=f"経験値: {pet['exp']}",
             color=discord.Color.blue()
         )
 
-        if image_path:
+        if os.path.isfile(image_path):
             file = discord.File(image_path, filename=pet["current_image"])
             embed.set_image(url=f"attachment://{pet['current_image']}")
         else:
+            embed.description += "\n\n⚠️ ペットの画像がありません。"
             file = None
 
         view = View(timeout=None)
         for feed_name in self.feed_exp.keys():
             view.add_item(FeedButton(label=feed_name, style=discord.ButtonStyle.primary, cog=self))
 
-        # 画像ファイルがある場合はfileをセットして送信
         await channel.send(file=file, embed=embed, view=view)
 
     @tasks.loop(minutes=10)
@@ -183,6 +169,5 @@ class ServerPetCogButtons(commands.Cog):
         self.ensure_guild_pet(ctx.guild.id)
         await self.update_pet_message(ctx.guild)
 
-# Discord.py 2.x の推奨コグ登録方法（非同期）
 async def setup(bot):
     await bot.add_cog(ServerPetCogButtons(bot))
