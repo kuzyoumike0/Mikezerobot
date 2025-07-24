@@ -25,7 +25,7 @@ async def load_cogs():
         "shutdown",       # ここにshutdown Cog
         "restart",         # ここにrestart Cogを追加
         "setup_secret",
-        "server_pet_channel",
+        "erver_pet_cog_buttons",
     ]
     for cog in cogs:
         try:
