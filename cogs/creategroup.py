@@ -116,6 +116,12 @@ class CreateGroup(commands.Cog):
                 except discord.NotFound:
                     continue
 
+        @commands.command()
+async def creategroup(self, ctx, *, channel_name: str):
+    print(f"creategroupコマンドが呼ばれました。channel_name={channel_name}")
+    await ctx.send(f"グループ作成コマンド受け付けました: {channel_name}")
+
+
 
 async def setup(bot):
     await bot.add_cog(CreateGroup(bot))
