@@ -53,5 +53,6 @@ class ExitHandler(commands.Cog):
         except Exception as e:
             print(f"[ExitHandler] {channel.name} で予期しないエラー: {e}")
 
-def setup(bot):
-    bot.add_cog(ExitHandler(bot))
+# setup関数を非同期化し、awaitでadd_cogを呼び出す
+async def setup(bot):
+    await bot.add_cog(ExitHandler(bot))
