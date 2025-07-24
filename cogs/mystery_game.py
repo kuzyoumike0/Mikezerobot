@@ -3,99 +3,101 @@ from discord.ext import commands
 import json
 import os
 import random
-import shlex
 from config import MYSTERY_CHANNEL_ID, MYSTERY_SET_CHANNEL_ID
 
-MYSTERY_FILE = "data/mysteries.json"
+MYSTERY_DATA_FILE = "data/mysteries.json"
 
 class MysteryGame(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        self.mysteries = self.load_mysteries()
         self.current_mystery = None
-        self.correct_users = set()
 
     def load_mysteries(self):
-        if os.path.exists(MYSTERY_FILE):
-            with open(MYSTERY_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return []
+        if not os.path.exists(MYSTERY_DATA_FILE):
+            return []
+        with open(MYSTERY_DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-    def save_mysteries(self, mysteries):
-        with open(MYSTERY_FILE, "w", encoding="utf-8") as f:
-            json.dump(mysteries, f, indent=4, ensure_ascii=False)
+    def save_mysteries(self):
+        with open(MYSTERY_DATA_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.mysteries, f, ensure_ascii=False, indent=2)
 
     @commands.command(name="set_mystery")
-    async def set_mystery(self, ctx, *, args):
+    @commands.has_permissions(administrator=True)
+    async def set_mystery(self, ctx, title: str, answer: str, *, question: str):
         if ctx.channel.id != MYSTERY_SET_CHANNEL_ID:
             return
 
-        try:
-            parts = shlex.split(args)
-            if len(parts) < 3:
-                await ctx.send("❌ 使用方法: `!set_mystery \"タイトル\" \"正解\" \"問題文\"`")
-                return
-            title, answer, question = parts[0], parts[1], " ".join(parts[2:])
-
-            mysteries = self.load_mysteries()
-            mysteries.append({
-                "title": title,
-                "answer": answer.lower(),
-                "question": question
-            })
-            self.save_mysteries(mysteries)
-            await ctx.send(f"✅ 謎「{title}」を登録しました。")
-
-        except Exception as e:
-            await ctx.send(f"❌ エラーが発生しました: {e}")
+        new_mystery = {
+            "title": title,
+            "question": question,
+            "answer": answer
+        }
+        self.mysteries.append(new_mystery)
+        self.save_mysteries()
+        await ctx.send(f"✅ 謎「{title}」を登録しました。")
 
     @commands.command(name="mystery")
     async def mystery(self, ctx):
         if ctx.channel.id != MYSTERY_CHANNEL_ID:
             return
 
-        mysteries = self.load_mysteries()
-        if not mysteries:
-            await ctx.send("⚠️ 謎が登録されていません。")
+        if not self.mysteries:
+            await ctx.send("❌ 登録されている謎がありません。")
             return
 
-        selected = random.choice(mysteries)
-        self.current_mystery = selected
-        self.correct_users.clear()
-
+        self.current_mystery = random.choice(self.mysteries)
         embed = discord.Embed(
-            title=f"🧩 謎：{selected['title']}",
-            description=selected['question'],
-            color=0x00ccff
+            title=f"🔍 謎解き：{self.current_mystery['title']}",
+            description=self.current_mystery['question'],
+            color=discord.Color.purple()
         )
         await ctx.send(embed=embed)
 
     @commands.command(name="answer")
-    async def answer(self, ctx, *, user_answer):
+    async def answer(self, ctx, *, user_input: str):
+        if ctx.channel.id != MYSTERY_CHANNEL_ID:
+            return
+
+        # モザイク形式でなければ警告
+        if not (user_input.startswith("||") and user_input.endswith("||")):
+            await ctx.send("❌ 回答は `!answer||回答||` の形式で入力してください。")
+            return
+
+        user_answer = user_input[2:-2].strip()
+
         if not self.current_mystery:
-            await ctx.send("❌ 現在出題中の謎がありません。")
+            await ctx.send("現在、出題中の謎はありません。")
             return
 
-        if ctx.author.id in self.correct_users:
-            await ctx.send("✅ あなたはすでに正解しています！")
-            return
-
-        # 回答部分をスパイラーテキスト（モザイク）で表示
-        if user_answer.lower().strip() == self.current_mystery["answer"]:
-            self.correct_users.add(ctx.author.id)
-            await ctx.send(f"🎉 正解！おめでとう、{ctx.author.display_name}さん！ 答え：||{user_answer}||")
+        if user_answer.lower() == self.current_mystery['answer'].lower():
+            await ctx.send(f"🎉 正解！ {ctx.author.mention}")
+            self.current_mystery = None
         else:
-            await ctx.send(f"{ctx.author.mention} の回答: ||{user_answer}|| ・・・残念、不正解です。")
+            await ctx.send(f"❌ 不正解… {ctx.author.mention}")
 
     @commands.command(name="helpme")
     async def helpme(self, ctx):
         embed = discord.Embed(
-            title="🔍 推理ゲームコマンド一覧",
-            description="このBotで使用できるコマンドは以下の通りです。",
-            color=discord.Color.green()
+            title="📘 推理・謎解きBot コマンド一覧",
+            color=discord.Color.teal()
         )
-        embed.add_field(name="!mystery", value="ランダムな謎を出題します（出題専用チャンネル限定）。", inline=False)
-        embed.add_field(name="!answer <解答>", value="現在出題されている謎に回答します。", inline=False)
-        embed.add_field(name='!set_mystery "タイトル" "正解" "問題文"', value="新しい謎を登録します（管理者用チャンネル限定）。", inline=False)
+        embed.add_field(
+            name="!mystery",
+            value="ランダムに謎を出題します（出題用チャンネル限定）",
+            inline=False
+        )
+        embed.add_field(
+            name="!answer||答え||",
+            value="出題された謎に回答します（モザイク必須）",
+            inline=False
+        )
+        embed.add_field(
+            name='!set_mystery "タイトル" "答え" "問題文"',
+            value="謎を追加します（セット用チャンネル限定・管理者のみ）",
+            inline=False
+        )
         await ctx.send(embed=embed)
 
 async def setup(bot):
