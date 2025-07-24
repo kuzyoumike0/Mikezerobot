@@ -5,15 +5,18 @@ import json
 import os
 import datetime
 
+# 設定ファイルパス
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
+# 餌の種類と経験値
 FOOD_VALUES = {
     "キラキラ": 10,
     "カチカチ": 10,
     "もちもち": 10,
 }
 
+# レベル経験値しきい値
 LEVEL_THRESHOLDS = {
     1: 0,
     2: 100,
@@ -21,23 +24,27 @@ LEVEL_THRESHOLDS = {
     4: 300,
 }
 
+# 経験値からレベルを判定
 def get_pet_level(exp: int):
     for level in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
         if exp >= LEVEL_THRESHOLDS[level]:
             return level
     return 1
 
+# ペットデータを読み込む
 def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
         return {}
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
+# ペットデータを保存する
 def save_pet_data(data):
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+# 餌のボタン定義
 class FoodButton(Button):
     def __init__(self, label, bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
@@ -61,6 +68,7 @@ class FoodButton(Button):
             await interaction.response.send_message("⏳ あなたはまだ餌を与えられません。1時間に1回だけです。", ephemeral=True)
             return
 
+        # 経験値を加算
         pet_data[server_id]["exp"] += FOOD_VALUES[self.food_type]
         pet_data[server_id]["last_fed_by"][user_id] = now.isoformat()
 
@@ -95,6 +103,7 @@ class FoodButton(Button):
                 view=view
             )
 
+# メインのCog定義
 class PetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -103,6 +112,7 @@ class PetCog(commands.Cog):
     def cog_unload(self):
         self.update_pet_image.cancel()
 
+    # !pet コマンドの定義
     @commands.command(name="pet")
     async def pet_command(self, ctx):
         server_id = str(ctx.guild.id)
@@ -111,7 +121,6 @@ class PetCog(commands.Cog):
         if server_id not in pet_data:
             pet_data[server_id] = {
                 "exp": 0,
-                "last_fed": "1970-01-01T00:00:00",
                 "last_image_change": "1970-01-01T00:00:00",
                 "last_fed_by": {}
             }
@@ -137,6 +146,7 @@ class PetCog(commands.Cog):
             embed.description = "⚠️ ペットの画像が見つかりません。"
             await ctx.send(embed=embed, view=view)
 
+    # 画像更新を定期実行（3時間ごと）
     @tasks.loop(minutes=1)
     async def update_pet_image(self):
         now = datetime.datetime.utcnow()
@@ -156,5 +166,6 @@ class PetCog(commands.Cog):
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
 
+# Cogを読み込む
 async def setup(bot: commands.Bot):
     await bot.add_cog(PetCog(bot))
