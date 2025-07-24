@@ -115,31 +115,6 @@ class MysteryGame(commands.Cog):
         save_mystery_data(data)
         await ctx.send("🔒 現在の謎を終了しました。")
 
-    @commands.command(name="mystery_rank")
-    async def mystery_rank(self, ctx):
-        """正解数ランキングを表示"""
-        data = load_mystery_data()
-        solved = data.get("solved", {})
-        score = {}
-        for ids in solved.values():
-            for uid in ids:
-                score[uid] = score.get(uid, 0) + 1
-        if not score:
-            await ctx.send("まだ誰も謎を解いていません。")
-            return
-
-        sorted_users = sorted(score.items(), key=lambda x: x[1], reverse=True)
-        description = ""
-        for i, (uid, count) in enumerate(sorted_users[:10], start=1):
-            try:
-                user = await self.bot.fetch_user(int(uid))
-                description += f"{i}. {user.name} - {count}問正解\n"
-            except Exception:
-                description += f"{i}. Unknown User - {count}問正解\n"
-
-        embed = discord.Embed(title="🏆 名探偵ランキング", description=description, color=discord.Color.gold())
-        await ctx.send(embed=embed)
-
     @commands.command(name="helpme_mystery")
     async def helpme_mystery(self, ctx):
         """このCogで使用可能なコマンド一覧を表示します"""
@@ -157,11 +132,6 @@ class MysteryGame(commands.Cog):
         embed.add_field(
             name="!answer <答え>",
             value="謎への回答を送信（正誤判定あり）",
-            inline=False
-        )
-        embed.add_field(
-            name="!mystery_rank",
-            value="正解数ランキングを表示",
             inline=False
         )
 
