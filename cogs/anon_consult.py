@@ -24,7 +24,7 @@ class AnonConsult(commands.Cog):
 
     def generate_anon_id(self):
         index = self.data["counter"]
-        anon_id = f"匿名{chr(65 + (index % 26))}さん"  # 匿名Aさん～Zさんをループ
+        anon_id = f"匿名{chr(65 + (index % 26))}さん"  # 匿名Aさん〜Zさんをループ
         self.data["counter"] += 1
         return anon_id
 
@@ -48,36 +48,36 @@ class AnonConsult(commands.Cog):
         posted_msg = await channel.send(message)
         thread = await posted_msg.create_thread(name=f"{anon_id} の相談スレッド")
 
-        consult_id = str(posted_msg.id)
-        self.data["consults"][consult_id] = {
-            "anon_id": anon_id,
+        # 匿名IDをキーにして保存
+        self.data["consults"][anon_id] = {
             "thread_id": thread.id
         }
         self.save_data()
 
-        # 送信内容はDMに残さず、送信成功のみ通知
-        await ctx.send("✅ 匿名相談を投稿しました！")
+        await ctx.send(f"✅ 匿名相談を投稿しました！あなたの匿名IDは **{anon_id}** です。返信時にこの名前を使ってください。")
 
     @commands.command(name="anon返信")
-    async def anon_reply(self, ctx: commands.Context, message_id: str, *, reply: str):
+    async def anon_reply(self, ctx: commands.Context, anon_id: str, *, reply: str):
         if not self.is_dm(ctx):
             await ctx.send("❌ このコマンドはDMでのみ使用してください。")
             return
 
-        if message_id not in self.data["consults"]:
-            await ctx.send("❌ そのIDの相談が見つかりませんでした。")
+        if anon_id not in self.data["consults"]:
+            await ctx.send(f"❌ 匿名ID「{anon_id}」の相談が見つかりませんでした。")
             return
 
-        anon_id = self.generate_anon_id()
-        thread_id = self.data["consults"][message_id]["thread_id"]
-
+        thread_id = self.data["consults"][anon_id]["thread_id"]
         thread = self.bot.get_channel(thread_id)
         if thread is None:
             await ctx.send("❌ スレッドが見つかりませんでした。")
             return
 
-        await thread.send(f"🗨️ **{anon_id} より返信：**\n{reply}")
-        await ctx.send("✅ 匿名で返信しました！")
+        # 返信側の匿名IDを新たに生成
+        reply_anon_id = self.generate_anon_id()
+        self.save_data()
+
+        await thread.send(f"🗨️ **{reply_anon_id} より返信：**\n{reply}")
+        await ctx.send(f"✅ 匿名で返信しました！あなたの匿名IDは **{reply_anon_id}** です。")
 
     @commands.command(name="soudanhelp")
     async def soudan_help(self, ctx: commands.Context):
@@ -95,8 +95,8 @@ class AnonConsult(commands.Cog):
             inline=False
         )
         embed.add_field(
-            name="!anon返信 <相談メッセージのID> <返信内容>",
-            value="指定した相談IDの相談に匿名で返信します。返信は専用スレッドに投稿されます。",
+            name="!anon返信 <匿名ID> <返信内容>",
+            value="匿名IDを指定して相談に匿名で返信します。返信は専用スレッドに投稿されます。",
             inline=False
         )
         embed.set_footer(text="匿名相談Botをご利用いただきありがとうございます！")
