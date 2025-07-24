@@ -40,6 +40,8 @@ FEED_TITLE_ROLES = {
 # ペットの一言を投稿するチャンネルID
 DAILY_POST_CHANNEL_ID = 1397897002465099887  
 
+# 匿名相談を投稿するチャンネルのIDに書き換えてください
+ANON_CHANNEL_ID = 1397965805744029706  
 
 # VCカテゴリID（テキストチャンネル作成用カテゴリ）
 VC_CATEGORY_ID = SECRET_CATEGORY_ID
