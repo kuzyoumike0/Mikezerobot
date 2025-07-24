@@ -119,4 +119,32 @@ class CreateGroup(commands.Cog):
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                print("[load_persistent_views] p
+                print("[load_persistent_views] persistent_views.json 読み込み成功")
+        except json.JSONDecodeError:
+            print("[load_persistent_views] persistent_views.json が壊れています。終了。")
+            return
+
+        entries = data.get("creategroup", [])
+        for entry in entries:
+            channel = self.bot.get_channel(entry["channel_id"])
+            if channel is None:
+                print(f"[load_persistent_views] チャンネルID {entry['channel_id']} が見つかりません。スキップ")
+                continue
+            try:
+                message = await channel.fetch_message(entry["message_id"])
+                view = CreateGroupView(entry["channel_name"], message)
+                self.bot.add_view(view)
+                print(f"[load_persistent_views] メッセージID {entry['message_id']} のビューを追加しました。")
+            except discord.NotFound:
+                print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
+                continue
+
+    @commands.command()
+    async def testcmd(self, ctx):
+        print("[testcmd] コマンドを受け取りました。")
+        await ctx.send("testcmdが動いています！")
+
+
+async def setup(bot):
+    await bot.add_cog(CreateGroup(bot))
+    print("[setup] CreateGroup Cog を読み込みました。")
