@@ -140,5 +140,5 @@ class PetCog(commands.Cog):
             traceback.print_exc()
             await ctx.send("❌ エラーが発生しました。管理者に連絡してください。")
 
-def setup(bot):
-    bot.add_cog(PetCog(bot))
+async def setup(bot):
+    await bot.add_cog(PetCog(bot))
