@@ -5,18 +5,15 @@ import json
 import os
 import datetime
 
-# 定数
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
-# 餌の種類と経験値
 FOOD_VALUES = {
     "キラキラ": 10,
     "カチカチ": 10,
     "もちもち": 10,
 }
 
-# レベルごとの経験値しきい値
 LEVEL_THRESHOLDS = {
     1: 0,
     2: 100,
@@ -24,29 +21,25 @@ LEVEL_THRESHOLDS = {
     4: 300,
 }
 
-
-def get_pet_level(exp: int) -> int:
+def get_pet_level(exp: int):
     for level in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
         if exp >= LEVEL_THRESHOLDS[level]:
             return level
     return 1
 
-
-def load_pet_data() -> dict:
+def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
         return {}
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-
-def save_pet_data(data: dict) -> None:
+def save_pet_data(data):
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-
 class FoodButton(Button):
-    def __init__(self, label: str, bot: commands.Bot):
+    def __init__(self, label, bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.bot = bot
         self.food_type = label
@@ -57,14 +50,9 @@ class FoodButton(Button):
         now = datetime.datetime.utcnow()
 
         pet_data = load_pet_data()
-
         if server_id not in pet_data:
-            pet_data[server_id] = {
-                "exp": 0,
-                "last_fed": "1970-01-01T00:00:00",
-                "last_image_change": "1970-01-01T00:00:00",
-                "last_fed_by": {}
-            }
+            await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True)
+            return
 
         last_fed_by = pet_data[server_id].get("last_fed_by", {}).get(user_id, "1970-01-01T00:00:00")
         last_fed_time = datetime.datetime.fromisoformat(last_fed_by)
@@ -76,13 +64,39 @@ class FoodButton(Button):
         pet_data[server_id]["exp"] += FOOD_VALUES[self.food_type]
         pet_data[server_id]["last_fed_by"][user_id] = now.isoformat()
 
+        exp = pet_data[server_id]["exp"]
+        level = get_pet_level(exp)
+        image_filename = f"level{level}_pet.png"
+        image_path = os.path.join(PET_IMAGES_PATH, image_filename)
+
         save_pet_data(pet_data)
 
-        await interaction.response.send_message(f"🐾 {interaction.user.mention}が「{self.food_type}」をあげました！", ephemeral=True)
+        embed = discord.Embed(title="🐶 サーバーペットの様子", color=discord.Color.green())
+        embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
 
+        view = View()
+        for food in FOOD_VALUES:
+            view.add_item(FoodButton(food, self.bot))
+
+        if os.path.exists(image_path):
+            file = discord.File(image_path, filename=image_filename)
+            embed.set_image(url=f"attachment://{image_filename}")
+            await interaction.response.send_message(
+                content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
+                embed=embed,
+                file=file,
+                view=view
+            )
+        else:
+            embed.description = "⚠️ ペットの画像が見つかりません。"
+            await interaction.response.send_message(
+                content=f"{interaction.user.mention} が「{self.food_type}」をあげました！",
+                embed=embed,
+                view=view
+            )
 
 class PetCog(commands.Cog):
-    def __init__(self, bot: commands.Bot):
+    def __init__(self, bot):
         self.bot = bot
         self.update_pet_image.start()
 
@@ -90,7 +104,7 @@ class PetCog(commands.Cog):
         self.update_pet_image.cancel()
 
     @commands.command(name="pet")
-    async def pet_command(self, ctx: commands.Context):
+    async def pet_command(self, ctx):
         server_id = str(ctx.guild.id)
         pet_data = load_pet_data()
 
@@ -101,6 +115,7 @@ class PetCog(commands.Cog):
                 "last_image_change": "1970-01-01T00:00:00",
                 "last_fed_by": {}
             }
+            save_pet_data(pet_data)
 
         exp = pet_data[server_id]["exp"]
         level = get_pet_level(exp)
@@ -111,7 +126,7 @@ class PetCog(commands.Cog):
         embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
 
         view = View()
-        for food in FOOD_VALUES.keys():
+        for food in FOOD_VALUES:
             view.add_item(FoodButton(food, self.bot))
 
         if os.path.exists(image_path):
@@ -120,7 +135,6 @@ class PetCog(commands.Cog):
             await ctx.send(embed=embed, file=file, view=view)
         else:
             embed.description = "⚠️ ペットの画像が見つかりません。"
-            print(f"[DEBUG] 画像が見つかりません: {image_path}")
             await ctx.send(embed=embed, view=view)
 
     @tasks.loop(minutes=1)
@@ -141,7 +155,6 @@ class PetCog(commands.Cog):
     @update_pet_image.before_loop
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
-
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PetCog(bot))
