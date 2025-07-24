@@ -5,6 +5,9 @@ import json
 import os
 import datetime
 
+# 設定ファイルから読み込み
+from config import PET_HELP_CHANNEL_ID, PET_RANKING_CHANNEL_ID, FEED_TITLE_ROLES
+
 # ファイルパス設定
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
@@ -24,13 +27,6 @@ LEVEL_THRESHOLDS = {
     2: 100,
     3: 200,
     4: 300,
-}
-
-# 餌やり回数に応じたロールID（称号）
-FEED_TITLE_ROLES = {
-    10: 1397793352396574720,  # 10回
-    30: 1397793748926201886,  # 30回
-    50: 1397794033236971601,  # 50回
 }
 
 # レベル取得関数
@@ -88,7 +84,6 @@ class ActionButton(Button):
                 await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True)
                 return
 
-            # 各アクションごとの最終実行時間キー
             cooldown_key = f"last_{self.action_type}_{user_id}"
             last_action_time_str = pet_data[server_id].get(cooldown_key, "1970-01-01T00:00:00")
             last_action_time = datetime.datetime.fromisoformat(last_action_time_str)
@@ -97,18 +92,15 @@ class ActionButton(Button):
                 await interaction.response.send_message(f"⏳ 「{self.action_type}」は1時間に1回だけです。", ephemeral=True)
                 return
 
-            # 経験値加算
             pet_data[server_id]["exp"] = pet_data[server_id].get("exp", 0) + ACTION_VALUES.get(self.action_type, 0)
             pet_data[server_id][cooldown_key] = now.isoformat()
 
-            # ユーザーステータス初期化
             user_stats = pet_data[server_id].setdefault("user_stats", {}).setdefault(user_id, {
                 "feed_count": 0,
                 "walk_count": 0,
                 "pat_count": 0,
             })
 
-            # 行動別回数加算
             if self.action_type in ["キラキラ", "カチカチ", "もちもち"]:
                 user_stats["feed_count"] += 1
             elif self.action_type == "散歩":
@@ -116,11 +108,9 @@ class ActionButton(Button):
             elif self.action_type == "撫でる":
                 user_stats["pat_count"] += 1
 
-            # 称号ロール更新は餌やり回数のみで実施
             member = interaction.user
             await update_feed_roles(member, user_stats["feed_count"])
 
-            # 機嫌の更新
             mood_boost = {
                 "キラキラ": 5,
                 "カチカチ": 5,
@@ -145,7 +135,6 @@ class ActionButton(Button):
             embed.add_field(name="🚶 散歩回数", value=f"{user_stats['walk_count']} 回", inline=True)
             embed.add_field(name="🤗 撫でる回数", value=f"{user_stats['pat_count']} 回", inline=True)
 
-            # 機嫌表示
             mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
             embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
 
@@ -230,6 +219,10 @@ class PetCog(commands.Cog):
 
     @commands.command(name="pet_ranking")
     async def pet_ranking_command(self, ctx):
+        if ctx.channel.id != PET_RANKING_CHANNEL_ID:
+            await ctx.send(f"⚠️ このコマンドは <#{PET_RANKING_CHANNEL_ID}> チャンネルでのみ使用可能です。")
+            return
+
         server_id = str(ctx.guild.id)
         pet_data = load_pet_data()
 
@@ -255,6 +248,10 @@ class PetCog(commands.Cog):
 
     @commands.command(name="pet_help")
     async def pet_help_command(self, ctx):
+        if ctx.channel.id != PET_HELP_CHANNEL_ID:
+            await ctx.send(f"⚠️ このコマンドは <#{PET_HELP_CHANNEL_ID}> チャンネルでのみ使用可能です。")
+            return
+
         embed = discord.Embed(
             title="🐶 ペットコマンド一覧",
             description=(
