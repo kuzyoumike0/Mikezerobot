@@ -10,12 +10,14 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 
 class CreateGroupView(View):
     def __init__(self, channel_name, message=None):
+        # timeout=None により無制限の永続ビュー
         super().__init__(timeout=None)
         self.channel_name = channel_name.lower().replace(" ", "-")
         self.participants = set()
         self.message = message
 
-    @discord.ui.button(label="参加", style=discord.ButtonStyle.primary)
+    # 永続ボタンには persistent=True を必須にする
+    @discord.ui.button(label="参加", style=discord.ButtonStyle.primary, persistent=True)
     async def join(self, interaction: discord.Interaction, button: Button):
         user = interaction.user
         self.participants.add(user)
@@ -36,7 +38,7 @@ class CreateGroupView(View):
                 content=f"「{self.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: {len(self.participants)}",
                 view=self)
 
-    @discord.ui.button(label="作成", style=discord.ButtonStyle.success)
+    @discord.ui.button(label="作成", style=discord.ButtonStyle.success, persistent=True)
     async def create(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
         category = discord.utils.get(guild.categories, id=CATEGORY_ID)
@@ -65,7 +67,7 @@ class CreateGroup(commands.Cog):
         print("[CreateGroup] Cog initialized.")
 
     async def cog_load(self):
-        # asyncio.create_task を使って永続ビューの読み込みを非同期で開始
+        # Bot起動後に永続ビューの読み込みを非同期開始
         asyncio.create_task(self.load_persistent_views())
         print("[CreateGroup] cog_load により persistent views をロード開始")
 
@@ -83,7 +85,7 @@ class CreateGroup(commands.Cog):
             f"「{view.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: 0", view=view)
         view.message = message
 
-        # 永続ビューに登録
+        # 永続ビュー情報をpersistent_views.jsonに保存
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -117,32 +119,4 @@ class CreateGroup(commands.Cog):
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                print("[load_persistent_views] persistent_views.json 読み込み成功")
-        except json.JSONDecodeError:
-            print("[load_persistent_views] persistent_views.json が壊れています。終了。")
-            return
-
-        entries = data.get("creategroup", [])
-        for entry in entries:
-            channel = self.bot.get_channel(entry["channel_id"])
-            if channel is None:
-                print(f"[load_persistent_views] チャンネルID {entry['channel_id']} が見つかりません。スキップ")
-                continue
-            try:
-                message = await channel.fetch_message(entry["message_id"])
-                view = CreateGroupView(entry["channel_name"], message)
-                self.bot.add_view(view)
-                print(f"[load_persistent_views] メッセージID {entry['message_id']} のビューを追加しました。")
-            except discord.NotFound:
-                print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
-                continue
-
-    @commands.command()
-    async def testcmd(self, ctx):
-        print("[testcmd] コマンドを受け取りました。")
-        await ctx.send("testcmdが動いています！")
-
-
-async def setup(bot):
-    await bot.add_cog(CreateGroup(bot))
-    print("[setup] CreateGroup Cog を読み込みました。")
+                print("[load_persistent_views] p
