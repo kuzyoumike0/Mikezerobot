@@ -15,19 +15,24 @@ ACTION_EXP = {
     "キラキラ": 10,
     "カチカチ": 10,
     "もちもち": 10,
+    "ふわふわ": 10,
     "散歩": 5,
     "撫でる": 7,
 }
 
-# レベルの閾値
-LEVEL_THRESHOLDS = {1: 0, 2: 100, 3: 200, 4: 300}
+# 餌が進化に必要な数
+EVOLVE_THRESHOLD = 100
 
-# 経験値からレベルを算出
-def get_level(exp: int):
-    for lvl in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
-        if exp >= LEVEL_THRESHOLDS[lvl]:
-            return lvl
-    return 1
+# 進化可能な餌の種類（優先順位順）
+EVOLVE_ORDER = ["もちもち", "カチカチ", "キラキラ", "ふわふわ"]
+
+# 画像ファイル名対応
+IMAGE_FILES = {
+    "もちもち": "pet_mochimochi.png",
+    "カチカチ": "pet_kachikachi.png",
+    "キラキラ": "pet_kirakira.png",
+    "ふわふわ": "pet_fuwafuwa.png",
+}
 
 # ペットデータ読み込み
 def load_pet_data():
@@ -41,6 +46,40 @@ def save_pet_data(data):
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
+
+# 進化判定・画像更新関数
+def check_and_update_evolution(pet_data, guild_id):
+    data = pet_data[guild_id]
+    # 餌のカウントを取得（なければ0）
+    feed_counts = {k: data.get(f"feed_{k}", 0) for k in IMAGE_FILES.keys()}
+    total_feed = sum(feed_counts.values())
+
+    # 画像更新は1時間に1回までに制限
+    now = datetime.datetime.utcnow()
+    last_change_str = data.get("last_image_change", "1970-01-01T00:00:00")
+    last_change = datetime.datetime.fromisoformat(last_change_str)
+    if (now - last_change).total_seconds() < 3600:
+        # 1時間経っていなければ画像更新しない
+        return
+
+    # 100個以上の餌があれば進化判定
+    if total_feed >= EVOLVE_THRESHOLD:
+        # 最も多く与えられた餌の種類で進化（優先順位に従う）
+        max_feed_type = None
+        max_feed_count = -1
+        for kind in EVOLVE_ORDER:
+            if feed_counts[kind] > max_feed_count:
+                max_feed_count = feed_counts[kind]
+                max_feed_type = kind
+
+        if max_feed_type:
+            # 画像を進化させる
+            data["current_image"] = IMAGE_FILES[max_feed_type]
+            # 餌カウントは100個分を減らす（繰り返し可能）
+            for kind in IMAGE_FILES.keys():
+                data[f"feed_{kind}"] = max(0, data.get(f"feed_{kind}", 0) - EVOLVE_THRESHOLD)
+            data["last_image_change"] = now.isoformat()
+            save_pet_data(pet_data)
 
 # ボタンクラス（各アクション用）
 class ActionButton(Button):
@@ -74,6 +113,11 @@ class ActionButton(Button):
             pet_data[guild_id]["exp"] = pet_data[guild_id].get("exp", 0) + exp_add
             pet_data[guild_id][cooldown_key] = now.isoformat()
 
+            # 餌カウント増加（餌の場合）
+            if self.action in IMAGE_FILES.keys():
+                key = f"feed_{self.action}"
+                pet_data[guild_id][key] = pet_data[guild_id].get(key, 0) + 1
+
             # ユーザースタッツ更新
             user_stats = pet_data[guild_id].setdefault("user_stats", {}).setdefault(user_id, {
                 "feed_count": 0,
@@ -82,7 +126,7 @@ class ActionButton(Button):
             })
 
             # アクション別カウント増加
-            if self.action in ["キラキラ", "カチカチ", "もちもち"]:
+            if self.action in IMAGE_FILES.keys():
                 user_stats["feed_count"] += 1
             elif self.action == "散歩":
                 user_stats["walk_count"] += 1
@@ -94,6 +138,7 @@ class ActionButton(Button):
                 "キラキラ": 5,
                 "カチカチ": 5,
                 "もちもち": 5,
+                "ふわふわ": 5,
                 "散歩": 10,
                 "撫でる": 7
             }.get(self.action, 0)
@@ -101,26 +146,35 @@ class ActionButton(Button):
             # 機嫌(mood)は最大100まで
             pet_data[guild_id]["mood"] = min(100, pet_data[guild_id].get("mood", 50) + mood_boost)
 
-            # レベル・機嫌取得
-            exp = pet_data[guild_id]["exp"]
-            level = get_level(exp)
-            mood = pet_data[guild_id].get("mood", 50)
+            # 進化判定・画像更新
+            check_and_update_evolution(pet_data, guild_id)
 
-            # 画像ファイルパス作成
-            image_file = f"level{level}_pet.png"
+            # 現在の画像ファイル名
+            image_file = pet_data[guild_id].get("current_image", IMAGE_FILES["ふわふわ"])
             image_path = os.path.join(PET_IMAGES_PATH, image_file)
 
+            # データ保存
             save_pet_data(pet_data)
 
             # 埋め込み作成
+            exp = pet_data[guild_id]["exp"]
+            mood = pet_data[guild_id].get("mood", 50)
+
+            mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
+            if mood >= 70:
+                personality = "元気いっぱい"
+            elif mood >= 40:
+                personality = "普通"
+            else:
+                personality = "ちょっと不機嫌"
+
             embed = discord.Embed(title="🐶 ミルクシュガーの様子", color=discord.Color.green())
             embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
             embed.add_field(name="🏅 あなたの餌やり数", value=f"{user_stats['feed_count']} 回", inline=True)
             embed.add_field(name="🚶 散歩回数", value=f"{user_stats['walk_count']} 回", inline=True)
             embed.add_field(name="🤗 撫でる回数", value=f"{user_stats['pat_count']} 回", inline=True)
-
-            mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
             embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
+            embed.add_field(name="💖 性格", value=personality, inline=False)
 
             # ボタン付きView作成
             view = View()
@@ -156,30 +210,45 @@ class PetCog(commands.Cog):
         pet_data = load_pet_data()
 
         if guild_id not in pet_data:
+            # 初期データ作成
             pet_data[guild_id] = {
                 "exp": 0,
                 "last_image_change": "1970-01-01T00:00:00",
                 "user_stats": {},
                 "mood": 50,
+                "current_image": IMAGE_FILES["ふわふわ"],  # 初期画像はふわふわ
             }
+            # 餌カウント初期化
+            for kind in IMAGE_FILES.keys():
+                pet_data[guild_id][f"feed_{kind}"] = 0
+
             save_pet_data(pet_data)
 
+        # 進化判定（起動時にも反映）
+        check_and_update_evolution(pet_data, guild_id)
+
         exp = pet_data[guild_id].get("exp", 0)
-        level = get_level(exp)
         mood = pet_data[guild_id].get("mood", 50)
         user_stats = pet_data[guild_id].get("user_stats", {}).get(user_id, {"feed_count":0,"walk_count":0,"pat_count":0})
 
-        image_file = f"level{level}_pet.png"
+        image_file = pet_data[guild_id].get("current_image", IMAGE_FILES["ふわふわ"])
         image_path = os.path.join(PET_IMAGES_PATH, image_file)
+
+        mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
+        if mood >= 70:
+            personality = "元気いっぱい"
+        elif mood >= 40:
+            personality = "普通"
+        else:
+            personality = "ちょっと不機嫌"
 
         embed = discord.Embed(title="🐶 ミルクシュガーの様子だよ", color=discord.Color.green())
         embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
         embed.add_field(name="🏅 あなたの餌やり数", value=f"{user_stats.get('feed_count',0)} 回", inline=True)
         embed.add_field(name="🚶 散歩回数", value=f"{user_stats.get('walk_count',0)} 回", inline=True)
         embed.add_field(name="🤗 撫でる回数", value=f"{user_stats.get('pat_count',0)} 回", inline=True)
-
-        mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
         embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
+        embed.add_field(name="💖 性格", value=personality, inline=False)
 
         view = View()
         for action in ACTION_EXP.keys():
@@ -229,7 +298,7 @@ class PetCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    # 3時間ごとに画像更新日時をリセット
+    # 3時間ごとに画像更新日時をリセット（任意で機能を残す）
     @tasks.loop(minutes=180)
     async def update_image_loop(self):
         pet_data = load_pet_data()
