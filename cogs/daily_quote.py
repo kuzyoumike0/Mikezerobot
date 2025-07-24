@@ -114,5 +114,22 @@ class DailyQuote(commands.Cog):
                 continue  # チャンネル投稿権限がない場合はスキップ
 
 
+    @commands.command(name="testquote")
+    async def test_quote_command(self, ctx):
+        """管理者用：今すぐテスト投稿"""
+        day = self.get_day_of_week()
+        user_id = str(ctx.author.id)
+        personality = self.get_personality_by_user(user_id)
+        message = self.get_daily_message(personality, day)
+
+        embed = discord.Embed(
+            title=f"🧪 テスト投稿：{ctx.author.display_name} への今日のひとこと",
+            description=f"性格：**{personality}**\n📅 **{day}曜日**\n📝 {message}",
+            color=discord.Color.purple()
+        )
+        await ctx.send(embed=embed)
+
+
+
 def setup(bot):
     bot.add_cog(DailyQuote(bot))
