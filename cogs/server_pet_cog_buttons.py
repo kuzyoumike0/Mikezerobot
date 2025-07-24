@@ -141,6 +141,9 @@ class PetCog(commands.Cog):
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
 
+print(f"[DEBUG] 画像パス: {image_path}")
+print(f"[DEBUG] ファイル存在チェック: {os.path.exists(image_path)}")
+
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(PetCog(bot))
