@@ -2,38 +2,51 @@ import discord
 from discord.ext import commands
 import asyncio
 import os
-from dotenv import load_dotenv
+import logging
 
-# .env ファイルから TOKEN を読み込む（Railwayやローカル開発用）
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
+# ロギング設定
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("bot")
 
-# Botのインテントとプレフィックス
+TOKEN = os.getenv("TOKEN")  # .envや環境変数から取得済みと仮定
+
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-# Bot起動時のイベント
-@bot.event
-async def on_ready():
-    print(f"✅ Bot起動完了: {bot.user} (ID: {bot.user.id})")
 
-# cogs フォルダ内のすべての cog を読み込む関数
 async def load_all_cogs():
-    for filename in os.listdir("./cogs"):
+    logger.info("Cogのロードを開始します。")
+    cogs_dir = "./cogs"
+    if not os.path.exists(cogs_dir):
+        logger.warning(f"{cogs_dir} フォルダが存在しません。")
+        return
+
+    for filename in os.listdir(cogs_dir):
         if filename.endswith(".py") and not filename.startswith("_"):
             extension = f"cogs.{filename[:-3]}"
             try:
                 await bot.load_extension(extension)
-                print(f"✅ Cog 読み込み成功: {extension}")
+                logger.info(f"✅ Loaded: {extension}")
             except Exception as e:
-                print(f"❌ Cog 読み込み失敗: {extension}")
-                print(e)
+                logger.error(f"❌ Failed to load {extension}: {e}")
 
-# 非同期の main 実行関数
+
+@bot.event
+async def on_ready():
+    logger.info(f"Bot is ready: {bot.user} (ID: {bot.user.id})")
+
+
+@bot.event
+async def on_command_error(ctx, error):
+    logger.error(f"コマンドエラー: {ctx.command} で例外発生: {error}")
+
+
 async def main():
+    logger.info("Bot起動処理を開始します。")
     await load_all_cogs()
+    logger.info("全Cogのロード完了。Botを起動します。")
     await bot.start(TOKEN)
 
-# 実行
+
 if __name__ == "__main__":
     asyncio.run(main())
