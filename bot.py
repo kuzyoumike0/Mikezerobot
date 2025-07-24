@@ -26,7 +26,7 @@ async def load_cogs():
         "vctimer",
         "join_sound",
         "setup_secret",
-        "server_pet_channel",
+        "erver_pet_cog_buttons",
     ]
     for cog in cogs:
         try:
