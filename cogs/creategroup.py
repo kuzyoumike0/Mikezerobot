@@ -132,7 +132,7 @@ class CreateGroup(commands.Cog):
                 print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
                 continue
 
-    # ここからテスト用簡易コマンドを追加
+    # テスト用簡易コマンドを追加
     @commands.command()
     async def testcmd(self, ctx):
         print("[testcmd] コマンドを受け取りました。")
