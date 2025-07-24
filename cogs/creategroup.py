@@ -61,8 +61,12 @@ class CreateGroupView(View):
 class CreateGroup(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
+        print("[CreateGroup] Cog initialized.")
+
+    async def cog_load(self):
+        # 永続ビューの読み込みタスクはここで起動
         self.bot.loop.create_task(self.load_persistent_views())
-        print("[CreateGroup] Cog initialized and persistent views loading task started.")
+        print("[CreateGroup] cog_load により persistent views をロード開始")
 
     @commands.command()
     async def creategroup(self, ctx, *, channel_name: str):
@@ -132,7 +136,6 @@ class CreateGroup(commands.Cog):
                 print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
                 continue
 
-    # テスト用簡易コマンドを追加
     @commands.command()
     async def testcmd(self, ctx):
         print("[testcmd] コマンドを受け取りました。")
