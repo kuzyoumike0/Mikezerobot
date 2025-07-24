@@ -10,7 +10,7 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 class CreateGroupView(View):
     def __init__(self, channel_name, message=None):
         super().__init__(timeout=None)
-        self.channel_name = channel_name
+        self.channel_name = channel_name.lower().replace(" ", "-")  # チャンネル名をスラッグ化
         self.participants = set()
         self.message = message
 
@@ -26,7 +26,7 @@ class CreateGroupView(View):
             await existing_channel.set_permissions(user, overwrite=discord.PermissionOverwrite(
                 read_messages=True, send_messages=True))
             await interaction.response.send_message(
-                f"既存チャンネル '{self.channel_name}' に参加しました。", ephemeral=True)
+                f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
         else:
             await interaction.response.send_message("参加を記録しました。", ephemeral=True)
 
@@ -54,8 +54,8 @@ class CreateGroupView(View):
                     read_messages=True, send_messages=True))
             await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
         else:
-            await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
-            await interaction.response.send_message(f"チャンネル '{self.channel_name}' を作成しました。", ephemeral=True)
+            new_channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
+            await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
 
 
 class CreateGroup(commands.Cog):
@@ -71,7 +71,7 @@ class CreateGroup(commands.Cog):
 
         view = CreateGroupView(channel_name)
         message = await ctx.send(
-            f"「{channel_name}」に参加する人はボタンをクリックしてください： 参加者数: 0", view=view)
+            f"「{view.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: 0", view=view)
         view.message = message
 
         # 永続ビューに登録
@@ -87,9 +87,10 @@ class CreateGroup(commands.Cog):
         data["creategroup"].append({
             "channel_id": ctx.channel.id,
             "message_id": message.id,
-            "channel_name": channel_name
+            "channel_name": view.channel_name
         })
 
+        os.makedirs(os.path.dirname(PERSISTENT_VIEWS_PATH), exist_ok=True)
         with open(PERSISTENT_VIEWS_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4)
 
@@ -110,4 +111,11 @@ class CreateGroup(commands.Cog):
             if channel:
                 try:
                     message = await channel.fetch_message(entry["message_id"])
-                    view = CreateGroupView(entry["channel_name"], messag_]()
+                    view = CreateGroupView(entry["channel_name"], message)
+                    self.bot.add_view(view)
+                except discord.NotFound:
+                    continue
+
+
+async def setup(bot):
+    await bot.add_cog(CreateGroup(bot))
