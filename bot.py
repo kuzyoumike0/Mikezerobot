@@ -9,15 +9,13 @@ from bump_task import BumpNotifier  # bumpタスククラスを読み込む
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-
 @bot.event
 async def on_voice_state_update(member, before, after):
     if member.bot:
         return  # Botの入退室は無視
     print(f"[VC変化] {member.name}: {before.channel} → {after.channel}")
 
-
-async def load_cogs():
+def load_cogs():
     cogs = [
         "helpme",
         "setupvc",
@@ -26,20 +24,18 @@ async def load_cogs():
         "vctimer",
         "join_sound",
         "setup_secret",
-        "erver_pet_cog_buttons",
+        "server_pet_cog_buttons",  # 修正済み
     ]
     for cog in cogs:
         try:
-            await bot.load_extension(f"cogs.{cog}")
+            bot.load_extension(f"cogs.{cog}")
             print(f"✅ Loaded cog: {cog}")
         except Exception as e:
             print(f"❌ Failed to load cog {cog}: {e}")
 
-
 @bot.event
 async def on_ready():
     print(f"[BOT] Logged in as {bot.user.name}")
-
 
 async def main():
     if TOKEN is None or TOKEN == "":
@@ -51,9 +47,8 @@ async def main():
     bump = BumpNotifier(bot)  # ループは__init__内でstartされる想定
 
     async with bot:
-        await load_cogs()
+        load_cogs()
         await bot.start(TOKEN)
-
 
 if __name__ == "__main__":
     asyncio.run(main())
