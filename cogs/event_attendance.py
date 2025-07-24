@@ -7,10 +7,9 @@ import datetime
 class EventAttendance(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
-        self.events = {}  # event_id: {datetime, message_id, channel_id, reactions: {emoji: set(user_ids)}}
+        self.events = {}  # event_id: {date, message_id, channel_id, event_name, title, reactions: {emoji: set(user_ids)}}
         self.event_counter = 0
 
-        # 出欠用絵文字
         self.REACTIONS = {
             "✅": "参加",
             "❌": "不参加",
@@ -21,20 +20,28 @@ class EventAttendance(commands.Cog):
     async def on_ready(self):
         print(f"{self.__class__.__name__} Cog is ready.")
 
-    # テキストコマンド：!set_event
     @commands.command(name="set_event")
-    async def set_event(self, ctx: commands.Context, *, datetime_str: str):
+    async def set_event(self, ctx: commands.Context, year: str, date: str, event_name: str, title: str):
+        """
+        使い方例:
+        !set_event 2025 08-01 夏祭り 花火大会
+        """
+
+        date_str = f"{year}-{date}"
         try:
-            event_dt = datetime.datetime.strptime(datetime_str, "%Y-%m-%d %H:%M")
+            event_date = datetime.datetime.strptime(date_str, "%Y-%m-%d").date()
         except ValueError:
-            await ctx.send("日時の形式が正しくありません。YYYY-MM-DD HH:MM の形式で入力してください。")
+            await ctx.send("日付の形式が正しくありません。\n年: YYYY, 日付: MM-DD の形式で入力してください。\n例: !set_event 2025 08-01 夏祭り 花火大会")
             return
 
         self.event_counter += 1
         event_id = self.event_counter
 
         msg = await ctx.send(
-            f"【イベントID {event_id}】\nイベント日時: {event_dt.strftime('%Y-%m-%d %H:%M')}\n"
+            f"【イベントID {event_id}】\n"
+            f"イベント名: {event_name}\n"
+            f"タイトル: {title}\n"
+            f"日付: {event_date.strftime('%Y-%m-%d')}\n"
             f"以下の絵文字で出欠をリアクションしてください。\n" +
             "\n".join(f"{emoji}: {desc}" for emoji, desc in self.REACTIONS.items())
         )
@@ -42,15 +49,16 @@ class EventAttendance(commands.Cog):
             await msg.add_reaction(emoji)
 
         self.events[event_id] = {
-            "datetime": event_dt,
+            "date": event_date,
             "message_id": msg.id,
             "channel_id": ctx.channel.id,
+            "event_name": event_name,
+            "title": title,
             "reactions": {emoji: set() for emoji in self.REACTIONS.keys()}
         }
 
         await ctx.send(f"イベントID {event_id} を登録しました。")
 
-    # テキストコマンド：!export_csv
     @commands.command(name="export_csv")
     async def export_csv(self, ctx: commands.Context, event_id: int):
         if event_id not in self.events:
@@ -76,9 +84,8 @@ class EventAttendance(commands.Cog):
         output.seek(0)
         file = discord.File(fp=io.BytesIO(output.read().encode()), filename=f"event_{event_id}_attendance.csv")
 
-        await ctx.send(f"イベントID {event_id} の出欠結果CSVです。", file=file)
+        await ctx.send(f"イベントID {event_id} ({event_data['event_name']} - {event_data['title']}) の出欠結果CSVです。", file=file)
 
-    # テキストコマンド：!help_event
     @commands.command(name="help_event")
     async def help_event(self, ctx: commands.Context):
         embed = discord.Embed(
@@ -86,8 +93,8 @@ class EventAttendance(commands.Cog):
             color=discord.Color.blue()
         )
         embed.add_field(
-            name="!set_event <YYYY-MM-DD HH:MM>",
-            value="イベントの日付と時間を登録します。例: `!set_event 2025-08-01 19:30`",
+            name="!set_event <年 YYYY> <日付 MM-DD> <イベント名> <タイトル>",
+            value="例: `!set_event 2025 08-01 夏祭り 花火大会`\nイベントを登録します。",
             inline=False
         )
         embed.add_field(
@@ -102,7 +109,6 @@ class EventAttendance(commands.Cog):
         )
         await ctx.send(embed=embed)
 
-    # リアクション追加イベント
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload: discord.RawReactionActionEvent):
         if payload.user_id == self.bot.user.id:
@@ -115,7 +121,6 @@ class EventAttendance(commands.Cog):
                     event_data["reactions"][emoji].add(payload.user_id)
                 break
 
-    # リアクション削除イベント
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload: discord.RawReactionActionEvent):
         if payload.user_id == self.bot.user.id:
