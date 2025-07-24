@@ -1,11 +1,11 @@
 import discord
 from discord.ext import commands, tasks
-from discord import app_commands
 from discord.ui import View, Button
 import json
 import os
 import datetime
 
+# 定数
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
@@ -16,7 +16,7 @@ FOOD_VALUES = {
     "もちもち": 10,
 }
 
-# レベルごとの必要経験値
+# レベルごとの経験値しきい値
 LEVEL_THRESHOLDS = {
     1: 0,
     2: 100,
@@ -25,28 +25,28 @@ LEVEL_THRESHOLDS = {
 }
 
 
-def get_pet_level(exp: int):
+def get_pet_level(exp: int) -> int:
     for level in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
         if exp >= LEVEL_THRESHOLDS[level]:
             return level
     return 1
 
 
-def load_pet_data():
+def load_pet_data() -> dict:
     if not os.path.exists(PET_DATA_PATH):
         return {}
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 
-def save_pet_data(data):
+def save_pet_data(data: dict) -> None:
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
 
 class FoodButton(Button):
-    def __init__(self, label, bot):
+    def __init__(self, label: str, bot: commands.Bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.bot = bot
         self.food_type = label
@@ -82,7 +82,7 @@ class FoodButton(Button):
 
 
 class PetCog(commands.Cog):
-    def __init__(self, bot):
+    def __init__(self, bot: commands.Bot):
         self.bot = bot
         self.update_pet_image.start()
 
@@ -90,7 +90,7 @@ class PetCog(commands.Cog):
         self.update_pet_image.cancel()
 
     @commands.command(name="pet")
-    async def pet_command(self, ctx):
+    async def pet_command(self, ctx: commands.Context):
         server_id = str(ctx.guild.id)
         pet_data = load_pet_data()
 
@@ -120,6 +120,7 @@ class PetCog(commands.Cog):
             await ctx.send(embed=embed, file=file, view=view)
         else:
             embed.description = "⚠️ ペットの画像が見つかりません。"
+            print(f"[DEBUG] 画像が見つかりません: {image_path}")
             await ctx.send(embed=embed, view=view)
 
     @tasks.loop(minutes=1)
@@ -140,9 +141,6 @@ class PetCog(commands.Cog):
     @update_pet_image.before_loop
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
-
-print(f"[DEBUG] 画像パス: {image_path}")
-print(f"[DEBUG] ファイル存在チェック: {os.path.exists(image_path)}")
 
 
 async def setup(bot: commands.Bot):
