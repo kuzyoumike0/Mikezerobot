@@ -100,20 +100,23 @@ class ActionButton(Button):
                 await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`コマンドで開始してください。", ephemeral=True)
                 return
 
-            # --- 餌の種類なら1時間に1回までのクールダウン判定 ---
-            cooldown_key = f"last_{self.action}_{user_id}"
-            last_time_str = pet_data[guild_id].get(cooldown_key, "1970-01-01T00:00:00")
-            last_time = datetime.datetime.fromisoformat(last_time_str)
+            # 餌の場合はユーザー単位で1時間に1回まで制限
             if self.action in IMAGE_FILES.keys():
+                cooldown_key = f"last_feed_{user_id}"
+                last_time_str = pet_data[guild_id].get(cooldown_key, "1970-01-01T00:00:00")
+                last_time = datetime.datetime.fromisoformat(last_time_str)
                 if (now - last_time).total_seconds() < 3600:
-                    await interaction.response.send_message(f"⏳ 「{self.action}」は1時間に1回だけ実行可能です。", ephemeral=True)
+                    await interaction.response.send_message(f"⏳ 餌は1時間に1回だけあげられます。", ephemeral=True)
                     return
-            # 散歩や撫でるは制限なし（必要ならここで追加可能）
+                # クールダウン更新
+                pet_data[guild_id][cooldown_key] = now.isoformat()
+            else:
+                # 散歩や撫でるは個別制限なし（必要ならここで追加可能）
+                pass
 
             # 経験値加算
             exp_add = ACTION_EXP.get(self.action, 0)
             pet_data[guild_id]["exp"] = pet_data[guild_id].get("exp", 0) + exp_add
-            pet_data[guild_id][cooldown_key] = now.isoformat()
 
             # 餌カウント増加（餌の場合）
             if self.action in IMAGE_FILES.keys():
