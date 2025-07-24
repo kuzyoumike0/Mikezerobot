@@ -82,11 +82,11 @@ TIME_RANGES = {
     "night": (22, 5),
 }
 
-# ✅ 追加: persistent_views.json の保存先
+# ✅ 追加: persistent_views.json の保存先を定義
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリが存在しなければ作成
-PERSISTENT_VIEW_FILE = os.path.join(DATA_DIR, "persistent_views.json")
+PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "data/persistent_views.json")
 
 
 # 🔽 時間帯判定と音声ファイル取得関数
@@ -100,6 +100,7 @@ def get_current_period(hour=None):
             if start <= hour < end:
                 return period
         else:
+            # 例えば night は 22～5時跨ぎなのでこの処理
             if hour >= start or hour < end:
                 return period
     return "unknown"
