@@ -100,13 +100,15 @@ class ActionButton(Button):
                 await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`コマンドで開始してください。", ephemeral=True)
                 return
 
-            # クールダウン（1時間）判定
+            # --- 餌の種類なら1時間に1回までのクールダウン判定 ---
             cooldown_key = f"last_{self.action}_{user_id}"
             last_time_str = pet_data[guild_id].get(cooldown_key, "1970-01-01T00:00:00")
             last_time = datetime.datetime.fromisoformat(last_time_str)
-            if (now - last_time).total_seconds() < 3600:
-                await interaction.response.send_message(f"⏳ 「{self.action}」は1時間に1回だけ実行可能です。", ephemeral=True)
-                return
+            if self.action in IMAGE_FILES.keys():
+                if (now - last_time).total_seconds() < 3600:
+                    await interaction.response.send_message(f"⏳ 「{self.action}」は1時間に1回だけ実行可能です。", ephemeral=True)
+                    return
+            # 散歩や撫でるは制限なし（必要ならここで追加可能）
 
             # 経験値加算
             exp_add = ACTION_EXP.get(self.action, 0)
@@ -316,14 +318,14 @@ class PetCog(commands.Cog):
     async def before_update_image_loop(self):
         await self.bot.wait_until_ready()
 
-    # 2時間ごとに機嫌値を-2（0未満禁止）
+    # 2時間ごとに機嫌値を-10（0未満禁止）
     @tasks.loop(minutes=120)
     async def mood_decay_loop(self):
         pet_data = load_pet_data()
         updated = False
         for guild_id, data in pet_data.items():
             current_mood = data.get("mood", 50)
-            new_mood = max(0, current_mood - 2)
+            new_mood = max(0, current_mood - 10)
             if new_mood != current_mood:
                 data["mood"] = new_mood
                 updated = True
