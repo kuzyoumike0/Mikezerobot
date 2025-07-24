@@ -34,14 +34,6 @@ IMAGE_FILES = {
     "ふわふわ": "pet_fuwafuwa.png",
 }
 
-# 性格マッピング
-PERSONALITY_MAP = {
-    "キラキラ": "キラキラ",
-    "カチカチ": "カチカチ",
-    "もちもち": "もちもち",
-    "ふわふわ": "まるまる"
-}
-
 # ペットデータ読み込み
 def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
@@ -58,11 +50,9 @@ def save_pet_data(data):
 # 進化判定・画像更新関数
 def check_and_update_evolution(pet_data, guild_id):
     data = pet_data[guild_id]
-    # 餌のカウントを取得（なければ0）
     feed_counts = {k: data.get(f"feed_{k}", 0) for k in IMAGE_FILES.keys()}
     total_feed = sum(feed_counts.values())
 
-    # 画像更新は1時間に1回までに制限
     now = datetime.datetime.utcnow()
     last_change_str = data.get("last_image_change", "1970-01-01T00:00:00")
     last_change = datetime.datetime.fromisoformat(last_change_str)
@@ -79,13 +69,19 @@ def check_and_update_evolution(pet_data, guild_id):
 
         if max_feed_type:
             data["current_image"] = IMAGE_FILES[max_feed_type]
-            data["personality"] = PERSONALITY_MAP.get(max_feed_type, "普通")
             for kind in IMAGE_FILES.keys():
                 data[f"feed_{kind}"] = max(0, data.get(f"feed_{kind}", 0) - EVOLVE_THRESHOLD)
             data["last_image_change"] = now.isoformat()
+            data["personality"] = {
+                "キラキラ": "キラキラ",
+                "カチカチ": "カチカチ",
+                "もちもち": "もちもち",
+                "ふわふわ": "まるまる"
+            }.get(max_feed_type, "普通")
             save_pet_data(pet_data)
 
-# （以下のコードはそのままですが、check_and_update_evolution に personality 設定を統合したため、
-# ActionButton の callback 内にあった personality 設定の重複は削除してOK）
+# 以下省略されたコード部分にはボタン処理、Cog、petコマンド、ループなどが続きます（既に提供済みの部分）
 
-# 必要なら続きのコードをここに追加（全文長いため、既存コードに合わせて分割できます）
+# 最後に setup 関数を追加
+def setup(bot):
+    return bot.add_cog(PetCog(bot))
