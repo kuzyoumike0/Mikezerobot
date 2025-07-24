@@ -4,3 +4,5 @@ aiohttp
 flask
 PyNaCl
 pytz
+discord.py
+asyncio
