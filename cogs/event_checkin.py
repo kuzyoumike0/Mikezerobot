@@ -123,5 +123,5 @@ class EventCheckin(commands.Cog):
         await ctx.send(file=discord.File(EVENT_DATA_FILE))
 
 
-def setup(bot):
-    bot.add_cog(EventCheckin(bot))
+async def setup(bot):
+    await bot.add_cog(EventAttendance(bot))
