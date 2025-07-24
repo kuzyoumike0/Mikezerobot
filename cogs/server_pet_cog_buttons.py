@@ -9,11 +9,13 @@ import datetime
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
-# 餌の種類と経験値
-FOOD_VALUES = {
+# 餌やり・行動ごとの経験値
+ACTION_VALUES = {
     "キラキラ": 10,
     "カチカチ": 10,
     "もちもち": 10,
+    "散歩": 5,
+    "撫でる": 3,
 }
 
 # 経験値→レベル変換しきい値
@@ -68,12 +70,12 @@ async def update_feed_roles(member: discord.Member, feed_count: int):
     except Exception as e:
         print(f"[ERROR] ロール更新失敗: {e}")
 
-# 餌やりボタン
-class FoodButton(Button):
+# アクションボタン定義（餌やり・散歩・撫でる共通）
+class ActionButton(Button):
     def __init__(self, label, bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.bot = bot
-        self.food_type = label
+        self.action_type = label
 
     async def callback(self, interaction: discord.Interaction):
         try:
@@ -86,41 +88,76 @@ class FoodButton(Button):
                 await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True)
                 return
 
-            last_fed_by = pet_data[server_id].get("last_fed_by", {}).get(user_id, "1970-01-01T00:00:00")
-            last_fed_time = datetime.datetime.fromisoformat(last_fed_by)
+            # 各アクションごとの最終実行時間キー
+            cooldown_key = f"last_{self.action_type}_{user_id}"
+            last_action_time_str = pet_data[server_id].get(cooldown_key, "1970-01-01T00:00:00")
+            last_action_time = datetime.datetime.fromisoformat(last_action_time_str)
 
-            if (now - last_fed_time).total_seconds() < 3600:
-                await interaction.response.send_message("⏳ あなたはまだ餌を与えられません。1時間に1回だけです。", ephemeral=True)
+            if (now - last_action_time).total_seconds() < 3600:
+                await interaction.response.send_message(f"⏳ 「{self.action_type}」は1時間に1回だけです。", ephemeral=True)
                 return
 
-            pet_data[server_id]["exp"] += FOOD_VALUES[self.food_type]
-            pet_data[server_id].setdefault("last_fed_by", {})[user_id] = now.isoformat()
-            pet_data[server_id].setdefault("feed_count", {}).setdefault(user_id, 0)
-            pet_data[server_id]["feed_count"][user_id] += 1
+            # 経験値加算
+            pet_data[server_id]["exp"] = pet_data[server_id].get("exp", 0) + ACTION_VALUES.get(self.action_type, 0)
+            pet_data[server_id][cooldown_key] = now.isoformat()
+
+            # ユーザーステータス初期化
+            user_stats = pet_data[server_id].setdefault("user_stats", {}).setdefault(user_id, {
+                "feed_count": 0,
+                "walk_count": 0,
+                "pat_count": 0,
+            })
+
+            # 行動別回数加算
+            if self.action_type in ["キラキラ", "カチカチ", "もちもち"]:
+                user_stats["feed_count"] += 1
+            elif self.action_type == "散歩":
+                user_stats["walk_count"] += 1
+            elif self.action_type == "撫でる":
+                user_stats["pat_count"] += 1
+
+            # 称号ロール更新は餌やり回数のみで実施
+            member = interaction.user
+            await update_feed_roles(member, user_stats["feed_count"])
+
+            # 機嫌の更新
+            mood_boost = {
+                "キラキラ": 5,
+                "カチカチ": 5,
+                "もちもち": 5,
+                "散歩": 10,
+                "撫でる": 7
+            }.get(self.action_type, 0)
+            pet_data[server_id]["mood"] = min(100, pet_data[server_id].get("mood", 50) + mood_boost)
 
             exp = pet_data[server_id]["exp"]
             level = get_pet_level(exp)
-            feed_count = pet_data[server_id]["feed_count"][user_id]
+            mood = pet_data[server_id].get("mood", 50)
+
             image_filename = f"level{level}_pet.png"
             image_path = os.path.join(PET_IMAGES_PATH, image_filename)
 
             save_pet_data(pet_data)
 
-            embed = discord.Embed(title="🐶 ミルクシュガーの様子だよ", color=discord.Color.green())
+            embed = discord.Embed(title="🐶 ミルクシュガーの様子", color=discord.Color.green())
             embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
-            embed.add_field(name="🏅 あなたの餌やり数", value=f"{feed_count} 回", inline=False)
+            embed.add_field(name="🏅 あなたの餌やり数", value=f"{user_stats['feed_count']} 回", inline=True)
+            embed.add_field(name="🚶 散歩回数", value=f"{user_stats['walk_count']} 回", inline=True)
+            embed.add_field(name="🤗 撫でる回数", value=f"{user_stats['pat_count']} 回", inline=True)
+
+            # 機嫌表示
+            mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
+            embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
 
             view = View()
-            for food in FOOD_VALUES:
-                view.add_item(FoodButton(food, self.bot))
-
-            member = interaction.user
-            await update_feed_roles(member, feed_count)
+            for action in ACTION_VALUES:
+                view.add_item(ActionButton(action, self.bot))
 
             if os.path.exists(image_path):
                 file = discord.File(image_path, filename=image_filename)
+                embed.set_image(url=f"attachment://{image_filename}")
                 await interaction.response.send_message(
-                    content=f"{member.mention} が「{self.food_type}」をあげました！",
+                    content=f"{member.mention} が「{self.action_type}」をしました！",
                     embed=embed,
                     file=file,
                     view=view
@@ -128,7 +165,7 @@ class FoodButton(Button):
             else:
                 embed.description = "⚠️ ペットの画像が見つかりません。"
                 await interaction.response.send_message(
-                    content=f"{member.mention} が「{self.food_type}」をあげました！",
+                    content=f"{member.mention} が「{self.action_type}」をしました！",
                     embed=embed,
                     view=view
                 )
@@ -137,14 +174,15 @@ class FoodButton(Button):
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ エラーが発生しました。管理者に連絡してください。", ephemeral=True)
 
-# ペット機能全体
 class PetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.update_pet_image.start()
+        self.mood_decay_loop.start()
 
     def cog_unload(self):
         self.update_pet_image.cancel()
+        self.mood_decay_loop.cancel()
 
     @commands.command(name="pet")
     async def pet_command(self, ctx):
@@ -156,24 +194,31 @@ class PetCog(commands.Cog):
             pet_data[server_id] = {
                 "exp": 0,
                 "last_image_change": "1970-01-01T00:00:00",
-                "last_fed_by": {},
-                "feed_count": {}
+                "user_stats": {},
+                "mood": 50
             }
             save_pet_data(pet_data)
 
-        exp = pet_data[server_id]["exp"]
+        exp = pet_data[server_id].get("exp", 0)
         level = get_pet_level(exp)
-        feed_count = pet_data[server_id].get("feed_count", {}).get(user_id, 0)
+        user_stats = pet_data[server_id].get("user_stats", {}).get(user_id, {"feed_count":0,"walk_count":0,"pat_count":0})
+        mood = pet_data[server_id].get("mood", 50)
+
         image_filename = f"level{level}_pet.png"
         image_path = os.path.join(PET_IMAGES_PATH, image_filename)
 
-        embed = discord.Embed(title="🐶 サーバーペットの様子", color=discord.Color.green())
+        embed = discord.Embed(title="🐶 ミルクシュガーの様子だよ", color=discord.Color.green())
         embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
-        embed.add_field(name="🏅 あなたの餌やり数", value=f"{feed_count} 回", inline=False)
+        embed.add_field(name="🏅 あなたの餌やり数", value=f"{user_stats.get('feed_count',0)} 回", inline=True)
+        embed.add_field(name="🚶 散歩回数", value=f"{user_stats.get('walk_count',0)} 回", inline=True)
+        embed.add_field(name="🤗 撫でる回数", value=f"{user_stats.get('pat_count',0)} 回", inline=True)
+
+        mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
+        embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
 
         view = View()
-        for food in FOOD_VALUES:
-            view.add_item(FoodButton(food, self.bot))
+        for action in ACTION_VALUES:
+            view.add_item(ActionButton(action, self.bot))
 
         if os.path.exists(image_path):
             file = discord.File(image_path, filename=image_filename)
@@ -188,11 +233,11 @@ class PetCog(commands.Cog):
         server_id = str(ctx.guild.id)
         pet_data = load_pet_data()
 
-        if server_id not in pet_data or "feed_count" not in pet_data[server_id]:
+        if server_id not in pet_data or "user_stats" not in pet_data[server_id]:
             await ctx.send("⚠️ まだ餌をあげたユーザーがいません。")
             return
 
-        feed_counts = pet_data[server_id]["feed_count"]
+        feed_counts = {uid: stats.get("feed_count", 0) for uid, stats in pet_data[server_id]["user_stats"].items()}
         sorted_feed = sorted(feed_counts.items(), key=lambda x: x[1], reverse=True)
 
         embed = discord.Embed(
@@ -225,6 +270,23 @@ class PetCog(commands.Cog):
 
     @update_pet_image.before_loop
     async def before_update_pet_image(self):
+        await self.bot.wait_until_ready()
+
+    @tasks.loop(minutes=180)  # 3時間ごとに機嫌を下げる
+    async def mood_decay_loop(self):
+        pet_data = load_pet_data()
+        updated = False
+        for server_id, data in pet_data.items():
+            current_mood = data.get("mood", 50)
+            new_mood = max(0, current_mood - 2)
+            if new_mood != current_mood:
+                data["mood"] = new_mood
+                updated = True
+        if updated:
+            save_pet_data(pet_data)
+
+    @mood_decay_loop.before_loop
+    async def before_mood_decay_loop(self):
         await self.bot.wait_until_ready()
 
 # コグ登録
