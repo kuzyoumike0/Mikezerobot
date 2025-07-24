@@ -83,5 +83,6 @@ def check_and_update_evolution(pet_data, guild_id):
 # 以下省略されたコード部分にはボタン処理、Cog、petコマンド、ループなどが続きます（既に提供済みの部分）
 
 # 最後に setup 関数を追加
-def setup(bot):
-    return bot.add_cog(PetCog(bot))
+async def setup(bot):
+    await bot.add_cog(PetCog(bot))
+
