@@ -1,16 +1,14 @@
-# cogs/daily_quote.py
-
 import discord
 from discord.ext import commands, tasks
 import datetime
 import json
 import random
 
-from config import DAILY_POST_CHANNEL_ID
+from config import DAILY_POST_CHANNEL_ID  # チャンネルIDはconfig.pyなどから取得
 
 PET_DATA_PATH = "data/pets.json"
 
-# 曜日別 × 性格別のメッセージ
+# 曜日 × 性格別メッセージ
 DAILY_QUOTES = {
     "月": {
         "まるまる": ["今週もゆっくり始めようまる～", "無理せずふんわりいけばいいまる～"],
@@ -34,7 +32,7 @@ DAILY_QUOTES = {
         "まるまる": ["あとちょっとで週末まる～", "ふわふわ頑張っていこうまる！"],
         "キラキラ": ["今日も全力チャージ！キラ！"],
         "カチカチ": ["後半戦、ペースを崩すな、カチカチ"],
-        "もちもち": ["今こそもっちりパワー！"もちもち～！]
+        "もちもち": ["今こそもっちりパワー！もちもち～！"]
     },
     "金": {
         "まるまる": ["金曜日はごほうびデーまる？", "週末前に癒やされようまる〜"],
@@ -66,7 +64,7 @@ class DailyQuote(commands.Cog):
         self.daily_quote_task.cancel()
 
     def get_day_of_week(self):
-        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))  # 日本時間
         return "月火水木金土日"[now.weekday()]
 
     def load_pet_data(self):
@@ -79,9 +77,7 @@ class DailyQuote(commands.Cog):
     def get_personality_by_user(self, user_id: str):
         pets = self.load_pet_data()
         pet = pets.get(user_id)
-        if not pet:
-            return "まるまる"  # デフォルト性格
-        return pet.get("personality", "まるまる")
+        return pet.get("personality", "まるまる") if pet else "まるまる"
 
     def get_daily_message(self, personality: str, day: str):
         messages = DAILY_QUOTES.get(day, {}).get(personality, ["今日もがんばろう！"])
@@ -94,8 +90,6 @@ class DailyQuote(commands.Cog):
             return
 
         day = self.get_day_of_week()
-
-        # botのサーバーメンバー一覧からユーザーごとに投稿
         for member in channel.guild.members:
             if member.bot:
                 continue
@@ -111,8 +105,7 @@ class DailyQuote(commands.Cog):
             try:
                 await channel.send(embed=embed)
             except discord.Forbidden:
-                continue  # チャンネル投稿権限がない場合はスキップ
-
+                continue
 
     @commands.command(name="testquote")
     async def test_quote_command(self, ctx):
@@ -130,8 +123,6 @@ class DailyQuote(commands.Cog):
         await ctx.send(embed=embed)
 
 
-# --- daily_quote.py の末尾を下記に修正 ---
-
+# Cog登録用
 async def setup(bot):
     await bot.add_cog(DailyQuote(bot))
-
