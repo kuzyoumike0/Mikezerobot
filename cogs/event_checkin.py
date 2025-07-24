@@ -24,7 +24,7 @@ class EventCheckin(commands.Cog):
 
         embed = discord.Embed(
             title=title,
-            description=f"出欠をリアクションで選んでください！\n日付: {date_str}",
+            description=f"出欠をリアクションで選んでください！\n📅 日付: {date_str}",
             color=discord.Color.blue()
         )
 
@@ -48,6 +48,7 @@ class EventCheckin(commands.Cog):
     async def on_raw_reaction_add(self, payload):
         if payload.message_id not in self.events:
             return
+
         emoji_str = str(payload.emoji)
         if emoji_str not in REACTION_OPTIONS:
             return
@@ -59,15 +60,20 @@ class EventCheckin(commands.Cog):
 
         event = self.events[payload.message_id]
         label = REACTION_OPTIONS[emoji_str]
-        if member.display_name not in event["reactions"][label]:
-            event["reactions"][label].append(member.display_name)
 
+        # すでに他のリアクションに入っている場合は除去
+        for other_label in event["reactions"]:
+            if member.display_name in event["reactions"][other_label]:
+                event["reactions"][other_label].remove(member.display_name)
+
+        event["reactions"][label].append(member.display_name)
         await self.update_embed(payload.message_id)
 
     @commands.Cog.listener()
     async def on_raw_reaction_remove(self, payload):
         if payload.message_id not in self.events:
             return
+
         emoji_str = str(payload.emoji)
         if emoji_str not in REACTION_OPTIONS:
             return
@@ -79,6 +85,7 @@ class EventCheckin(commands.Cog):
 
         event = self.events[payload.message_id]
         label = REACTION_OPTIONS[emoji_str]
+
         if member.display_name in event["reactions"][label]:
             event["reactions"][label].remove(member.display_name)
 
@@ -86,37 +93,40 @@ class EventCheckin(commands.Cog):
 
     async def update_embed(self, message_id):
         event = self.events[message_id]
-        message = event["message"]
         embed = discord.Embed(
             title=event["title"],
-            description=f"出欠をリアクションで選んでください！\n日付: {event['date']}",
+            description=f"出欠をリアクションで選んでください！\n📅 日付: {event['date']}",
             color=discord.Color.green()
         )
+
         for emoji, label in REACTION_OPTIONS.items():
             count = len(event["reactions"][label])
             embed.add_field(name=f"{emoji} {label}", value=f"{count}人", inline=False)
-        await message.edit(embed=embed)
+
+        await event["message"].edit(embed=embed)
 
     @commands.command(name="export_csv")
     async def export_csv(self, ctx):
         if not self.events:
-            await ctx.send("エクスポートするイベントがありません。")
+            await ctx.send("現在エクスポート可能なイベントはありません。")
             return
 
         with open(EVENT_DATA_FILE, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["イベントID", "日付", "タイトル", "ニックネーム"])
+            writer.writerow(["イベントID", "日付", "タイトル", "区分", "ニックネーム"])
 
             for event in self.events.values():
-                event_id = event["event_id"]
-                date = event["date"]
-                title = event["title"]
                 for label, names in event["reactions"].items():
                     for name in names:
-                        writer.writerow([event_id, date, title, name])
+                        writer.writerow([
+                            event["event_id"],
+                            event["date"],
+                            event["title"],
+                            label,
+                            name
+                        ])
 
         await ctx.send(file=discord.File(EVENT_DATA_FILE))
 
-def setup(bot):
-    async def setup(bot):
+async def setup(bot):
     await bot.add_cog(EventCheckin(bot))
