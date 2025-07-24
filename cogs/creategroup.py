@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord.ui import View, Button
 import json
 import os
+import asyncio
 
 from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_PATH
 
@@ -64,8 +65,8 @@ class CreateGroup(commands.Cog):
         print("[CreateGroup] Cog initialized.")
 
     async def cog_load(self):
-        # 永続ビューの読み込みタスクはここで起動
-        self.bot.loop.create_task(self.load_persistent_views())
+        # asyncio.create_task を使って永続ビューの読み込みを非同期で開始
+        asyncio.create_task(self.load_persistent_views())
         print("[CreateGroup] cog_load により persistent views をロード開始")
 
     @commands.command()
