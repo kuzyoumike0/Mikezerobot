@@ -7,14 +7,22 @@ import traceback
 # トークンの読み込み（.env や環境変数から）
 TOKEN = os.getenv("TOKEN")  # Railwayでは .env に設定する
 
-# コマンドプレフィックスとインテント
+# コマンドプレフィックスとインテント（message_contentを明示的に有効化）
 intents = discord.Intents.all()
+intents.message_content = True  # ← 重要！
+
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # 起動メッセージ
 @bot.event
 async def on_ready():
     print(f"✅ Botとしてログインしました: {bot.user}（ID: {bot.user.id}）")
+
+# エラー表示（デバッグ用）
+@bot.event
+async def on_command_error(ctx, error):
+    await ctx.send(f"⚠️ コマンドエラー: {error}")
+    traceback.print_exception(type(error), error, error.__traceback__)
 
 # 起動処理
 async def main():
