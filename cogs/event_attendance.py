@@ -1,3 +1,5 @@
+# event_checkin.py（cogs/event_checkin.py）
+
 import discord
 from discord.ext import commands
 import csv
@@ -18,15 +20,14 @@ class EventCheckin(commands.Cog):
         self.bot = bot
         self.events = {}
 
-    @commands.command(name="set_event")
+    @commands.command(name="set_event")  # ← コマンド名には '!' を含めない
     async def set_event(self, ctx, year: str, month: str, day: str, *, title: str):
-        """イベントを登録して出欠確認メッセージを送信します。"""
         date_str = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         event_id = f"{date_str}_{title}"
 
         embed = discord.Embed(
-            title=f"{title}",
-            description=f"出欠をリアクションで選んでください！\n📅 日付: {date_str}",
+            title=title,
+            description=f"出欠をリアクションで選んでください！\n日付: {date_str}",
             color=discord.Color.blue()
         )
 
@@ -48,26 +49,18 @@ class EventCheckin(commands.Cog):
 
     @commands.Cog.listener()
     async def on_raw_reaction_add(self, payload):
-        if payload.message_id not in self.events or payload.user_id == self.bot.user.id:
+        if payload.message_id not in self.events:
             return
         if payload.emoji.name not in REACTION_OPTIONS:
             return
 
         guild = self.bot.get_guild(payload.guild_id)
-        if guild is None:
-            return
         member = guild.get_member(payload.user_id)
         if member is None or member.bot:
             return
 
         event = self.events[payload.message_id]
         label = REACTION_OPTIONS[payload.emoji.name]
-
-        # 他のリアクションを除去（1ユーザー1リアクション制）
-        for other_label, users in event["reactions"].items():
-            if member.display_name in users and other_label != label:
-                users.remove(member.display_name)
-
         if member.display_name not in event["reactions"][label]:
             event["reactions"][label].append(member.display_name)
 
@@ -81,8 +74,6 @@ class EventCheckin(commands.Cog):
             return
 
         guild = self.bot.get_guild(payload.guild_id)
-        if guild is None:
-            return
         member = guild.get_member(payload.user_id)
         if member is None or member.bot:
             return
@@ -99,7 +90,7 @@ class EventCheckin(commands.Cog):
         message = event["message"]
         embed = discord.Embed(
             title=event["title"],
-            description=f"出欠をリアクションで選んでください！\n📅 日付: {event['date']}",
+            description=f"出欠をリアクションで選んでください！\n日付: {event['date']}",
             color=discord.Color.green()
         )
         for emoji, label in REACTION_OPTIONS.items():
@@ -107,22 +98,26 @@ class EventCheckin(commands.Cog):
             embed.add_field(name=f"{emoji} {label}", value=f"{count}人", inline=False)
         await message.edit(embed=embed)
 
-    @commands.command(name="export_csv")
+       @commands.command(name="export_csv")
     async def export_csv(self, ctx):
-        """現在のイベント出欠情報をCSVとしてエクスポートします。"""
         if not self.events:
-            await ctx.send("⚠️ エクスポートするイベントがありません。")
+            await ctx.send("エクスポートするイベントがありません。")
             return
 
         with open(EVENT_DATA_FILE, mode="w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
-            writer.writerow(["イベントID", "日付", "部", "ニックネーム"])
+            writer.writerow(["イベントID", "日付", "タイトル", "ニックネーム"])
+
             for event in self.events.values():
+                event_id = event["event_id"]
+                date = event["date"]
+                title = event["title"]
                 for label, names in event["reactions"].items():
                     for name in names:
-                        writer.writerow([event["event_id"], event["date"], label, name])
+                        writer.writerow([event_id, date, title, name])
 
-        await ctx.send("✅ 出欠情報をCSVに書き出しました。", file=discord.File(EVENT_DATA_FILE))
+        await ctx.send(file=discord.File(EVENT_DATA_FILE))
+
 
 def setup(bot):
     bot.add_cog(EventCheckin(bot))
