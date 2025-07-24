@@ -79,11 +79,12 @@ class MysteryGame(commands.Cog):
             await ctx.send("✅ あなたはすでに正解しています！")
             return
 
+        # 回答部分をスパイラーテキスト（モザイク）で表示
         if user_answer.lower().strip() == self.current_mystery["answer"]:
             self.correct_users.add(ctx.author.id)
-            await ctx.send(f"🎉 正解！おめでとう、{ctx.author.display_name}さん！")
+            await ctx.send(f"🎉 正解！おめでとう、{ctx.author.display_name}さん！ 答え：||{user_answer}||")
         else:
-            await ctx.send("❌ 残念、不正解です。")
+            await ctx.send(f"{ctx.author.mention} の回答: ||{user_answer}|| ・・・残念、不正解です。")
 
     @commands.command(name="helpme")
     async def helpme(self, ctx):
@@ -94,7 +95,7 @@ class MysteryGame(commands.Cog):
         )
         embed.add_field(name="!mystery", value="ランダムな謎を出題します（出題専用チャンネル限定）。", inline=False)
         embed.add_field(name="!answer <解答>", value="現在出題されている謎に回答します。", inline=False)
-        embed.add_field(name="!set_mystery \"タイトル\" \"正解\" \"問題文\"", value="新しい謎を登録します（管理者用チャンネル限定）。", inline=False)
+        embed.add_field(name='!set_mystery "タイトル" "正解" "問題文"', value="新しい謎を登録します（管理者用チャンネル限定）。", inline=False)
         await ctx.send(embed=embed)
 
 async def setup(bot):
