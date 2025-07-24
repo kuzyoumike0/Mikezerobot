@@ -74,6 +74,7 @@ LEAVE_SOUNDS = {
     "night": "leave_night.mp3",
 }
 
+# 時間帯の範囲
 TIME_RANGES = {
     "morning": (5, 12),
     "afternoon": (12, 17),
@@ -81,11 +82,14 @@ TIME_RANGES = {
     "night": (22, 5),
 }
 
-# 🔽 追加: persistent_views.json の保存先
-DATA_DIR = os.path.join(os.path.dirname(__file__), "data")
+# ✅ 追加: persistent_views.json の保存先
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(CURRENT_DIR, "data")
+os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリが存在しなければ作成
 PERSISTENT_VIEW_FILE = os.path.join(DATA_DIR, "persistent_views.json")
 
 
+# 🔽 時間帯判定と音声ファイル取得関数
 def get_current_period(hour=None):
     """現在の時間帯を判定する関数。"""
     if hour is None:
@@ -110,4 +114,4 @@ def get_join_sound():
 def get_leave_sound():
     """現在の時間帯に対応した退室音ファイル名を返す。"""
     period = get_current_period()
-    return LEA
+    return LEAVE_SOUNDS.get(period, None)
