@@ -6,11 +6,11 @@ from collections import defaultdict
 EVENT_DATA_FILE = "event_data.csv"
 
 REACTION_OPTIONS = {
-    "🟡": "朝の部",
-    "🟢": "昼の部",
-    "🔵": "夜の部",
-    "📣": "中締め",
-    "❔": "未定"
+    ":sunny:  ": "朝の部",
+    ":sun_with_face: ": "昼の部",
+    ":full_moon: ": "夜の部",
+    ":first_quarter_moon_with_face: ": "中締め",
+    ":question: ": "未定"
 }
 
 class EventCheckin(commands.Cog):
