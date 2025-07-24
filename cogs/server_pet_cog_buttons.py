@@ -92,15 +92,18 @@ class ActionButton(Button):
                 await interaction.response.send_message(f"⏳ 「{self.action_type}」は1時間に1回だけです。", ephemeral=True)
                 return
 
+            # 経験値加算
             pet_data[server_id]["exp"] = pet_data[server_id].get("exp", 0) + ACTION_VALUES.get(self.action_type, 0)
             pet_data[server_id][cooldown_key] = now.isoformat()
 
+            # ユーザー統計情報取得
             user_stats = pet_data[server_id].setdefault("user_stats", {}).setdefault(user_id, {
                 "feed_count": 0,
                 "walk_count": 0,
                 "pat_count": 0,
             })
 
+            # 行動別の回数加算
             if self.action_type in ["キラキラ", "カチカチ", "もちもち"]:
                 user_stats["feed_count"] += 1
             elif self.action_type == "散歩":
@@ -111,6 +114,7 @@ class ActionButton(Button):
             member = interaction.user
             await update_feed_roles(member, user_stats["feed_count"])
 
+            # 機嫌ブースト
             mood_boost = {
                 "キラキラ": 5,
                 "カチカチ": 5,
@@ -138,10 +142,12 @@ class ActionButton(Button):
             mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
             embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
 
+            # ボタン表示用View作成
             view = View()
             for action in ACTION_VALUES:
                 view.add_item(ActionButton(action, self.bot))
 
+            # 画像ありなしで送信分け
             if os.path.exists(image_path):
                 file = discord.File(image_path, filename=image_filename)
                 embed.set_image(url=f"attachment://{image_filename}")
@@ -160,6 +166,7 @@ class ActionButton(Button):
                 )
         except Exception as e:
             print(f"[ERROR] Interaction callback error: {e}")
+            # 二重レスポンス防止
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ エラーが発生しました。管理者に連絡してください。", ephemeral=True)
 
@@ -175,7 +182,7 @@ class PetCog(commands.Cog):
 
     @commands.command(name="pet")
     async def pet_command(self, ctx):
-        # !petコマンドを特定チャンネルに制限する場合の例
+        # !petコマンドを特定チャンネルに制限する例
         if ctx.channel.id != PET_COMMAND_CHANNEL_ID:
             await ctx.send(f"⚠️ このコマンドは <#{PET_COMMAND_CHANNEL_ID}> チャンネルでのみ使用可能です。")
             return
