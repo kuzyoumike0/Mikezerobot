@@ -1,7 +1,6 @@
 import discord
 from discord.ext import commands
 import csv
-import os
 from collections import defaultdict
 
 EVENT_DATA_FILE = "event_data.csv"
@@ -20,13 +19,16 @@ class EventCheckin(commands.Cog):
         self.events = {}
 
     @commands.command(name="!set_event")
-    async def set_event(self, ctx, year: str, date: str, event_name: str, title: str):
-        event_id = f"{year}-{date}_{event_name}_{title}"
+    async def set_event(self, ctx, year: str, month: str, day: str, *, title: str):
+        date_str = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+        event_id = f"{date_str}_{title}"
+
         embed = discord.Embed(
-            title=f"{event_name} - {title}",
-            description=f"出欠をリアクションで選んでください！\n日付: {year}-{date}",
+            title=f"{title}",
+            description=f"出欠をリアクションで選んでください！\n日付: {date_str}",
             color=discord.Color.blue()
         )
+
         for emoji, label in REACTION_OPTIONS.items():
             embed.add_field(name=f"{emoji} {label}", value="0人", inline=False)
 
@@ -34,8 +36,8 @@ class EventCheckin(commands.Cog):
 
         self.events[message.id] = {
             "event_id": event_id,
-            "title": f"{event_name} - {title}",
-            "date": f"{year}-{date}",
+            "title": title,
+            "date": date_str,
             "message": message,
             "reactions": defaultdict(list)
         }
