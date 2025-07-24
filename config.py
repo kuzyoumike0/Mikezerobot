@@ -37,6 +37,10 @@ FEED_TITLE_ROLES = {
     50: 1397794033236971601,  # 50回
 }
 
+# ペットの一言を送信するチャンネルID
+PET_TALK_CHANNEL_ID = 1397897002465099887  # ←実際のチャンネルIDに変更
+
+
 # VCカテゴリID（テキストチャンネル作成用カテゴリ）
 VC_CATEGORY_ID = SECRET_CATEGORY_ID
 
