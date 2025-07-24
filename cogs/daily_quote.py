@@ -130,6 +130,8 @@ class DailyQuote(commands.Cog):
         await ctx.send(embed=embed)
 
 
+# --- daily_quote.py の末尾を下記に修正 ---
 
-def setup(bot):
-    bot.add_cog(DailyQuote(bot))
+async def setup(bot):
+    await bot.add_cog(DailyQuote(bot))
+
