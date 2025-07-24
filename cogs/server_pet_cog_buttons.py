@@ -1,13 +1,14 @@
-from discord.ext import commands
 import discord
+from discord.ext import commands
 
-intents = discord.Intents.default()
-intents.message_content = True
+class ServerPetCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
 
-bot = commands.Bot(command_prefix="!", intents=intents)
+    @commands.command(name="pet")
+    async def pet(self, ctx):
+        await ctx.send("ペットを呼び出しました！")
 
-@bot.command()
-async def pet(ctx):
-    await ctx.send("✅ !pet が正常に動作しています")
-
-bot.run("YOUR_BOT_TOKEN")
+# これが Cog 読み込みのエントリーポイント
+async def setup(bot):
+    await bot.add_cog(ServerPetCog(bot))
