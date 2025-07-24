@@ -1,47 +1,53 @@
 import os
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
+from config import TOKEN
 import asyncio
-import traceback
-
-load_dotenv()
-TOKEN = os.getenv("TOKEN")
-print(f"Using token: {'***' if TOKEN else 'No token found!'}")
+from keep_alive import keep_alive
+from bump_task import BumpNotifier  # bumpタスククラスを読み込む
 
 intents = discord.Intents.all()
 bot = commands.Bot(command_prefix="!", intents=intents)
 
+@bot.event
+async def on_voice_state_update(member, before, after):
+    if member.bot:
+        return  # Botの入退室は無視
+    print(f"[VC変化] {member.name}: {before.channel} → {after.channel}")
+
 async def load_cogs():
     cogs = [
         "helpme",
-        "creategroup",
         "setupvc",
-        "vctimer",
         "vote",
-        "exit_handler",
-        "bump_reminder",
+        "creategroup",
+        "vctimer",
         "join_sound",
-        "shutdown",       # ここにshutdown Cog
-        "restart",         # ここにrestart Cogを追加
         "setup_secret",
-        "erver_pet_cog_buttons",
+        "server_pet_cog_buttons",
     ]
     for cog in cogs:
         try:
             await bot.load_extension(f"cogs.{cog}")
             print(f"✅ Loaded cog: {cog}")
-        except Exception:
-            print(f"❌ Failed to load cog {cog}:")
-            traceback.print_exc()
+        except Exception as e:
+            print(f"❌ Failed to load cog {cog}: {e}")
 
 @bot.event
 async def on_ready():
-    print(f"🟢 Logged in as {bot.user} (ID: {bot.user.id})")
+    print(f"[BOT] Logged in as {bot.user.name}")
 
 async def main():
-    await load_cogs()
+    if TOKEN is None or TOKEN == "":
+        print("⚠️ TOKENが設定されていません。環境変数を確認してください。")
+        return
+
+    keep_alive()  # Webサーバー起動（不要なら削除）
+
+    bump = BumpNotifier(bot)  # ループは__init__内でstartされる想定
+
     async with bot:
+        await load_cogs()
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
