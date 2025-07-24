@@ -12,7 +12,7 @@ from config import PET_HELP_CHANNEL_ID, PET_RANKING_CHANNEL_ID, PET_COMMAND_CHAN
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
-# 餌やり・行動ごとの経験値
+# 行動ごとの経験値
 ACTION_VALUES = {
     "キラキラ": 10,
     "カチカチ": 10,
@@ -29,27 +29,27 @@ LEVEL_THRESHOLDS = {
     4: 300,
 }
 
-# レベル取得関数
+# 経験値からレベルを取得
 def get_pet_level(exp: int):
     for level in sorted(LEVEL_THRESHOLDS.keys(), reverse=True):
         if exp >= LEVEL_THRESHOLDS[level]:
             return level
     return 1
 
-# ペットデータ読み込み
+# ペットデータの読み込み
 def load_pet_data():
     if not os.path.exists(PET_DATA_PATH):
         return {}
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-# ペットデータ保存
+# ペットデータの保存
 def save_pet_data(data):
     os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
-# 称号ロールの更新
+# 餌やり回数に応じた称号ロールの更新
 async def update_feed_roles(member: discord.Member, feed_count: int):
     try:
         for threshold, role_id in FEED_TITLE_ROLES.items():
@@ -66,7 +66,7 @@ async def update_feed_roles(member: discord.Member, feed_count: int):
     except Exception as e:
         print(f"[ERROR] ロール更新失敗: {e}")
 
-# アクションボタン定義（餌やり・散歩・撫でる共通）
+# 行動ボタンのクラス定義
 class ActionButton(Button):
     def __init__(self, label, bot):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
@@ -81,7 +81,10 @@ class ActionButton(Button):
 
             pet_data = load_pet_data()
             if server_id not in pet_data:
-                await interaction.response.send_message("⚠️ ペットがまだ生成されていません。`!pet`で開始してください。", ephemeral=True)
+                await interaction.response.send_message(
+                    "⚠️ ペットがまだ生成されていません。`!pet`で開始してください。",
+                    ephemeral=True
+                )
                 return
 
             cooldown_key = f"last_{self.action_type}_{user_id}"
@@ -96,14 +99,14 @@ class ActionButton(Button):
             pet_data[server_id]["exp"] = pet_data[server_id].get("exp", 0) + ACTION_VALUES.get(self.action_type, 0)
             pet_data[server_id][cooldown_key] = now.isoformat()
 
-            # ユーザー統計情報取得
+            # ユーザーごとの統計情報
             user_stats = pet_data[server_id].setdefault("user_stats", {}).setdefault(user_id, {
                 "feed_count": 0,
                 "walk_count": 0,
                 "pat_count": 0,
             })
 
-            # 行動別の回数加算
+            # 行動ごとに回数を増やす
             if self.action_type in ["キラキラ", "カチカチ", "もちもち"]:
                 user_stats["feed_count"] += 1
             elif self.action_type == "散歩":
@@ -114,7 +117,7 @@ class ActionButton(Button):
             member = interaction.user
             await update_feed_roles(member, user_stats["feed_count"])
 
-            # 機嫌ブースト
+            # 機嫌値の増加（上限100）
             mood_boost = {
                 "キラキラ": 5,
                 "カチカチ": 5,
@@ -133,6 +136,7 @@ class ActionButton(Button):
 
             save_pet_data(pet_data)
 
+            # 埋め込みメッセージ作成
             embed = discord.Embed(title="🐶 ミルクシュガーの様子", color=discord.Color.green())
             embed.add_field(name="📈 経験値", value=f"{exp} XP", inline=False)
             embed.add_field(name="🏅 あなたの餌やり数", value=f"{user_stats['feed_count']} 回", inline=True)
@@ -142,12 +146,11 @@ class ActionButton(Button):
             mood_status = "😄 機嫌良好" if mood >= 70 else "😐 普通" if mood >= 40 else "😞 不機嫌"
             embed.add_field(name="🧠 機嫌", value=f"{mood} / 100\n{mood_status}", inline=False)
 
-            # ボタン表示用View作成
+            # ボタンも埋め込みに付ける
             view = View()
             for action in ACTION_VALUES:
                 view.add_item(ActionButton(action, self.bot))
 
-            # 画像ありなしで送信分け
             if os.path.exists(image_path):
                 file = discord.File(image_path, filename=image_filename)
                 embed.set_image(url=f"attachment://{image_filename}")
@@ -166,7 +169,6 @@ class ActionButton(Button):
                 )
         except Exception as e:
             print(f"[ERROR] Interaction callback error: {e}")
-            # 二重レスポンス防止
             if not interaction.response.is_done():
                 await interaction.response.send_message("⚠️ エラーが発生しました。管理者に連絡してください。", ephemeral=True)
 
@@ -180,6 +182,7 @@ class PetCog(commands.Cog):
         self.update_pet_image.cancel()
         self.mood_decay_loop.cancel()
 
+    # ペット状態表示コマンド
     @commands.command(name="pet")
     async def pet_command(self, ctx):
         # !petコマンドを特定チャンネルに制限する例
@@ -229,6 +232,7 @@ class PetCog(commands.Cog):
             embed.description = "⚠️ ペットの画像が見つかりません。"
             await ctx.send(embed=embed, view=view)
 
+    # 餌やりランキングコマンド（ニックネーム表示）
     @commands.command(name="pet_ranking")
     async def pet_ranking_command(self, ctx):
         if ctx.channel.id != PET_RANKING_CHANNEL_ID:
@@ -253,11 +257,13 @@ class PetCog(commands.Cog):
 
         for idx, (user_id, count) in enumerate(sorted_feed[:10], start=1):
             member = ctx.guild.get_member(int(user_id))
+            # ニックネーム（表示名）を取得、見つからなければユーザーID表示
             name = member.display_name if member else f"ユーザーID:{user_id}"
             embed.add_field(name=f"{idx}位: {name}", value=f"{count} 回", inline=False)
 
         await ctx.send(embed=embed)
 
+    # ヘルプコマンド
     @commands.command(name="pet_help")
     async def pet_help_command(self, ctx):
         if ctx.channel.id != PET_HELP_CHANNEL_ID:
@@ -275,6 +281,7 @@ class PetCog(commands.Cog):
         )
         await ctx.send(embed=embed)
 
+    # ペット画像更新タスク（3時間毎）
     @tasks.loop(minutes=1)
     async def update_pet_image(self):
         now = datetime.datetime.utcnow()
@@ -294,7 +301,8 @@ class PetCog(commands.Cog):
     async def before_update_pet_image(self):
         await self.bot.wait_until_ready()
 
-    @tasks.loop(minutes=180)  # 3時間ごとに機嫌を下げる
+    # 機嫌減衰タスク（3時間ごとに機嫌を2下げる）
+    @tasks.loop(minutes=180)
     async def mood_decay_loop(self):
         pet_data = load_pet_data()
         updated = False
@@ -311,6 +319,6 @@ class PetCog(commands.Cog):
     async def before_mood_decay_loop(self):
         await self.bot.wait_until_ready()
 
-# コグ登録
+# コグ登録関数
 async def setup(bot: commands.Bot):
     await bot.add_cog(PetCog(bot))
