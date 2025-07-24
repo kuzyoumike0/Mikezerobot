@@ -4,7 +4,7 @@ import json
 import os
 from datetime import datetime
 
-from config import MYSTERY_CHANNEL_ID  # チャンネル指定用
+from config import MYSTERY_CHANNEL_ID, MYSTERY_SET_CHANNEL_ID  # チャンネル指定用（出題用とセット用）
 
 DATA_PATH = "data/mysteries.json"
 
@@ -72,6 +72,11 @@ class MysteryGame(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def set_mystery(self, ctx, title: str, answer: str, *, question: str):
         """管理者用：新しい謎をセットし、指定チャンネルに出題"""
+        # 実行チャンネルをチェック
+        if ctx.channel.id != MYSTERY_SET_CHANNEL_ID:
+            await ctx.send(f"❌ このコマンドは <#{MYSTERY_SET_CHANNEL_ID}> チャンネルでのみ実行可能です。")
+            return
+
         data = load_mystery_data()
         mystery_id = len(data["history"]) + 1
         new_mystery = {
@@ -96,7 +101,7 @@ class MysteryGame(commands.Cog):
             await channel.send(embed=embed)
             await ctx.send(f"📨 謎を <#{MYSTERY_CHANNEL_ID}> に出題しました。")
         else:
-            await ctx.send("⚠️ 謎はセットされましたが、チャンネルが見つかりません。")
+            await ctx.send("⚠️ 謎はセットされましたが、出題用チャンネルが見つかりません。")
 
     @commands.command(name="close_mystery")
     @commands.has_permissions(administrator=True)
@@ -162,7 +167,7 @@ class MysteryGame(commands.Cog):
 
         embed.add_field(
             name="!set_mystery <タイトル> <正解> <問題文>",
-            value="🛠 管理者専用：新しい謎を登録して出題",
+            value=f"🛠 管理者専用：新しい謎を登録して出題（<{MYSTERY_SET_CHANNEL_ID}> チャンネルでのみ使用可）",
             inline=False
         )
         embed.add_field(
