@@ -25,6 +25,18 @@ VC_CHANNEL_IDS = {
     "秘密VC": 1397685082369818881
 }
 
+# pet用のコマンド許可チャンネルID（int）
+PET_HELP_CHANNEL_ID = 1397793018744012880  # !pet_helpコマンドが許可されるチャンネルID
+PET_RANKING_CHANNEL_ID = 1397794425060589692  # !pet_rankingコマンドが許可されるチャンネルID
+
+# 餌やり回数に応じた称号ロールID（例）
+FEED_TITLE_ROLES = {
+    10: 1397793352396574720,  # 10回
+    30: 1397793748926201886,  # 30回
+    50: 1397794033236971601,  # 50回
+}
+
+
 # VCカテゴリID（テキストチャンネル作成用カテゴリ）
 VC_CATEGORY_ID = SECRET_CATEGORY_ID
 
