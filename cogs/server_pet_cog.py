@@ -1,10 +1,12 @@
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix="!", intents=intents)
+from discord.ext import commands
 
-@commands.command()
-async def test(ctx):
-    await ctx.send("Botコマンドは動いています！")
+class TestCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+
+    @commands.command()
+    async def test(self, ctx):
+        await ctx.send("Botコマンドは動いています！")
 
 def setup(bot):
-    bot.add_cog(YourCogName(bot))
+    bot.add_cog(TestCog(bot))
