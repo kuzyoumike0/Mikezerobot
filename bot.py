@@ -15,7 +15,7 @@ async def on_voice_state_update(member, before, after):
         return  # Botの入退室は無視
     print(f"[VC変化] {member.name}: {before.channel} → {after.channel}")
 
-def load_cogs():
+async def load_cogs():
     cogs = [
         "helpme",
         "setupvc",
@@ -24,11 +24,11 @@ def load_cogs():
         "vctimer",
         "join_sound",
         "setup_secret",
-        "server_pet_cog_buttons",  # 修正済み
+        "server_pet_cog_buttons",
     ]
     for cog in cogs:
         try:
-            bot.load_extension(f"cogs.{cog}")
+            await bot.load_extension(f"cogs.{cog}")
             print(f"✅ Loaded cog: {cog}")
         except Exception as e:
             print(f"❌ Failed to load cog {cog}: {e}")
@@ -47,7 +47,7 @@ async def main():
     bump = BumpNotifier(bot)  # ループは__init__内でstartされる想定
 
     async with bot:
-        load_cogs()
+        await load_cogs()
         await bot.start(TOKEN)
 
 if __name__ == "__main__":
