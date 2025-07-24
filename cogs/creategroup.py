@@ -34,14 +34,19 @@ class CreateGroupView(View):
 
         if self.message:
             await self.message.edit(
-                content=
-                f"「{self.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: {len(self.participants)}",
+                content=(
+                    f"「{self.channel_name}」に参加する人はボタンをクリックしてください： "
+                    f"参加者数: {len(self.participants)}"),
                 view=self)
 
     @discord.ui.button(label="作成", style=discord.ButtonStyle.success)
     async def create(self, interaction: discord.Interaction, button: Button):
         guild = interaction.guild
         category = discord.utils.get(guild.categories, id=CATEGORY_ID)
+
+        # 参加者にコマンド実行者（作成ボタン押した人）を必ず追加
+        self.participants.add(interaction.user)
+
         overwrites = {
             guild.default_role:
             discord.PermissionOverwrite(read_messages=False)
