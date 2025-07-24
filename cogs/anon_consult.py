@@ -24,12 +24,19 @@ class AnonConsult(commands.Cog):
 
     def generate_anon_id(self):
         index = self.data["counter"]
-        anon_id = f"匿名{chr(65 + (index % 26))}さん"
+        anon_id = f"匿名{chr(65 + (index % 26))}さん"  # 匿名Aさん～Zさんをループ
         self.data["counter"] += 1
         return anon_id
 
+    def is_dm(self, ctx):
+        return isinstance(ctx.channel, discord.DMChannel)
+
     @commands.command(name="anon相談")
     async def anon_consult(self, ctx: commands.Context, *, content: str):
+        if not self.is_dm(ctx):
+            await ctx.send("❌ このコマンドはDMでのみ使用してください。")
+            return
+
         channel = self.bot.get_channel(ANON_CHANNEL_ID)
         if channel is None:
             await ctx.send("❌ 投稿チャンネルが見つかりません。管理者に連絡してください。")
@@ -48,10 +55,15 @@ class AnonConsult(commands.Cog):
         }
         self.save_data()
 
+        # 送信内容はDMに残さず、送信成功のみ通知
         await ctx.send("✅ 匿名相談を投稿しました！")
 
     @commands.command(name="anon返信")
     async def anon_reply(self, ctx: commands.Context, message_id: str, *, reply: str):
+        if not self.is_dm(ctx):
+            await ctx.send("❌ このコマンドはDMでのみ使用してください。")
+            return
+
         if message_id not in self.data["consults"]:
             await ctx.send("❌ そのIDの相談が見つかりませんでした。")
             return
@@ -69,6 +81,10 @@ class AnonConsult(commands.Cog):
 
     @commands.command(name="soudanhelp")
     async def soudan_help(self, ctx: commands.Context):
+        if not self.is_dm(ctx):
+            await ctx.send("❌ このコマンドはDMでのみ使用してください。")
+            return
+
         embed = discord.Embed(
             title="🤖 匿名相談Botの使い方",
             color=discord.Color.blue()
@@ -85,7 +101,6 @@ class AnonConsult(commands.Cog):
         )
         embed.set_footer(text="匿名相談Botをご利用いただきありがとうございます！")
         await ctx.send(embed=embed)
-
 
 async def setup(bot):
     await bot.add_cog(AnonConsult(bot))
