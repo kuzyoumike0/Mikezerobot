@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import PET_COMMAND_CHANNEL_ID as PET_CHANNEL_ID, FEED_TITLE_ROLES
+from config import PET_CHANNEL_ID, ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50  # configからロールID読み込み
 
 PET_DATA_PATH = "data/pets.json"
 
@@ -47,8 +47,7 @@ class PetView(View):
                 "exp": {"kirakira": 0, "kachikachi": 0, "mochimochi": 0, "fuwafuwa": 0},
                 "last_feed": {},
                 "last_pet": {},
-                "last_walk": {},
-                "feed_counts": {}
+                "last_walk": {}
             }
         with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -56,6 +55,28 @@ class PetView(View):
     def save_pet(self, pet):
         with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
             json.dump(pet, f, ensure_ascii=False, indent=2)
+
+    async def update_roles(self, guild: discord.Guild, user: discord.Member, total_exp: int):
+        roles_to_remove = [ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50]
+        roles_to_add = None
+        if total_exp >= 50:
+            roles_to_add = ROLE_TITLE_50
+        elif total_exp >= 30:
+            roles_to_add = ROLE_TITLE_30
+        elif total_exp >= 10:
+            roles_to_add = ROLE_TITLE_10
+
+        # まず称号ロールを外す
+        for role_id in roles_to_remove:
+            role = guild.get_role(role_id)
+            if role and role in user.roles:
+                await user.remove_roles(role)
+
+        # 条件を満たすロールを付与
+        if roles_to_add:
+            role = guild.get_role(roles_to_add)
+            if role and role not in user.roles:
+                await user.add_roles(role)
 
     class FeedButton(Button):
         def __init__(self, label, style, emoji, key, exp):
@@ -65,12 +86,9 @@ class PetView(View):
 
         async def callback(self, interaction: discord.Interaction):
             view: PetView = self.view
-            user = interaction.user
-            user_id = str(user.id)
+            user_id = str(interaction.user.id)
             pet = view.load_pet()
             pet.setdefault("last_feed", {})
-            pet.setdefault("feed_counts", {})
-
             cooldown, mins = is_on_cooldown(pet["last_feed"].get(user_id))
             if cooldown:
                 await interaction.response.send_message(f"⏳ {self.label}はあと{mins}分後にあげられます。", ephemeral=True)
@@ -78,47 +96,16 @@ class PetView(View):
 
             pet["exp"][self.key] += self.exp
             pet["last_feed"][user_id] = datetime.utcnow().isoformat()
-            pet["feed_counts"][user_id] = pet["feed_counts"].get(user_id, 0) + 1
             pet["mood"] = min(100, pet.get("mood", 50) + 5)
             view.save_pet(pet)
 
-            await self.update_feed_title_role(user, pet["feed_counts"][user_id], interaction.guild)
+            # 称号ロール更新
+            total_exp = sum(pet.get("exp", {}).values())
+            guild = interaction.guild
+            user = interaction.user
+            await view.update_roles(guild, user, total_exp)
 
             await interaction.response.send_message(f"{self.emoji} {self.label}をあげました！", ephemeral=True)
-
-        async def update_feed_title_role(self, user: discord.Member, feed_count: int, guild: discord.Guild):
-            roles_to_add = []
-            roles_to_remove = []
-
-            for count_threshold, role_id in FEED_TITLE_ROLES.items():
-                role = guild.get_role(role_id)
-                if not role:
-                    continue
-                if feed_count >= count_threshold:
-                    roles_to_add.append(role)
-                else:
-                    roles_to_remove.append(role)
-
-            for role in roles_to_remove:
-                if role in user.roles:
-                    try:
-                        await user.remove_roles(role, reason="餌やり称号更新のため")
-                    except Exception:
-                        pass
-
-            if roles_to_add:
-                max_role = max(roles_to_add, key=lambda r: r.position)
-                if max_role not in user.roles:
-                    try:
-                        await user.add_roles(max_role, reason="餌やり称号付与")
-                    except Exception:
-                        pass
-                for role in roles_to_add:
-                    if role != max_role and role in user.roles:
-                        try:
-                            await user.remove_roles(role, reason="餌やり称号整理")
-                        except Exception:
-                            pass
 
     class PetButton(Button):
         def __init__(self, style, emoji):
@@ -170,12 +157,13 @@ class PetGame(commands.Cog):
 
         view = PetView(self.bot, ctx.author)
         pet = view.load_pet()
+        total_exp = sum(pet.get("exp", {}).values())
         embed = discord.Embed(
             title="🐶 ミルクシュガーの育成",
             description=(
                 f"性格: **{pet.get('personality', 'ふわふわ')}**\n"
                 f"機嫌: {pet.get('mood', 50)}/100\n"
-                f"経験値: {sum(pet.get('exp', {}).values())}"
+                f"経験値: {total_exp}"
             ),
             color=discord.Color.pink()
         )
@@ -183,4 +171,3 @@ class PetGame(commands.Cog):
 
 def setup(bot):
     bot.add_cog(PetGame(bot))
-
