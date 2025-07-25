@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands, tasks
-from datetime import datetime, timezone, timedelta
+from datetime import datetime
 import pytz
 
 from config import DAILY_POST_CHANNEL_ID
@@ -33,7 +33,6 @@ class DailyQuote(commands.Cog):
             }
             day_jp = weekday_map.get(day_of_week, "月")
 
-            # ふわふわ, キラキラ, カチカチ, もちもちの例文辞書
             quotes = {
                 "月": {
                     "ふわふわ": ["今週もゆっくり始めようふわ～", "無理せずふんわりいけばいいふわ～"],
@@ -79,12 +78,9 @@ class DailyQuote(commands.Cog):
                 }
             }
 
-            # petの性格は共通ファイルを読み込みなどから取得が望ましいがここは仮で"ふわふわ"固定
+            # petの性格は仮で"ふわふわ"固定
             personality = "ふわふわ"
-
             msgs = quotes.get(day_jp, {}).get(personality, ["今日もがんばろう！"])
-
-            # チャンネルに1回だけ投稿したい場合、pinやmessage id保存など別途管理が必要（省略）
 
             await channel.send(f"【ミルクシュガーの今日の一言】\n{msgs[0]}")
 
