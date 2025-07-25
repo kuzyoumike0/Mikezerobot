@@ -32,7 +32,7 @@ def is_on_cooldown(last_time_str):
     return False, 0
 
 class PetView(View):
-    def __init__(self, bot, author: discord.Member):
+    def __init__(self, bot, author: discord.Member | None):
         super().__init__(timeout=None)
         self.bot = bot
         self.author = author
@@ -173,3 +173,4 @@ class PetGame(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(PetGame(bot))
+    bot.add_view(PetView(bot, None))  # 再起動時にView永続化対応
