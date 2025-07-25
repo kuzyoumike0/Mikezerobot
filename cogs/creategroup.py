@@ -226,5 +226,4 @@ class CreateGroup(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(CreateGroup(bot))
-    print("[setup] CreateGroup Cog を読み込みました。")
+    await bot.add_cog(DailyQuote(bot))
