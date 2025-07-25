@@ -10,14 +10,9 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 
 class CreateGroupView(View):
     def __init__(self, channel_name, message=None, participants=None):
-        # timeout=None により無制限の永続ビュー
-        super().__init__(timeout=None)
+        super().__init__(timeout=None)  # 永続ビュー（timeoutなし）
         self.channel_name = channel_name.lower().replace(" ", "-")
-        self.participants = set()
-        if participants:
-            # 参加者IDからMemberオブジェクトは取得できないのでIDのまま保持
-            # 利用時にguildからMemberを取得する方法を後述します
-            self.participants = set(participants)
+        self.participants = set(participants) if participants else set()
         self.message = message
 
         join_button = Button(label="参加", style=discord.ButtonStyle.primary)
@@ -31,7 +26,7 @@ class CreateGroupView(View):
     async def join_callback(self, interaction: discord.Interaction):
         try:
             user = interaction.user
-            self.participants.add(user.id)  # IDで保持
+            self.participants.add(user.id)
 
             guild = interaction.guild
             category = discord.utils.get(guild.categories, id=CATEGORY_ID)
@@ -40,10 +35,17 @@ class CreateGroupView(View):
             if existing_channel:
                 await existing_channel.set_permissions(user, overwrite=discord.PermissionOverwrite(
                     read_messages=True, send_messages=True))
-                await interaction.response.send_message(
-                    f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(
+                        f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send(
+                        f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
             else:
-                await interaction.response.send_message("参加を記録しました。", ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("参加を記録しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send("参加を記録しました。", ephemeral=True)
 
             if self.message:
                 await self.message.edit(
@@ -53,6 +55,8 @@ class CreateGroupView(View):
             print(f"[ERROR] join_callback内で例外: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+            else:
+                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
 
     async def create_callback(self, interaction: discord.Interaction):
         try:
@@ -64,7 +68,6 @@ class CreateGroupView(View):
                 guild.default_role: discord.PermissionOverwrite(read_messages=False)
             }
 
-            # IDからMemberオブジェクトを取得してpermission設定
             members = []
             for user_id in self.participants:
                 member = guild.get_member(user_id)
@@ -77,22 +80,28 @@ class CreateGroupView(View):
                 for member in members:
                     await existing_channel.set_permissions(member, overwrite=discord.PermissionOverwrite(
                         read_messages=True, send_messages=True))
-                await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
+                else:
+                    await interaction.followup.send("既存のチャンネルに参加者を追加しました。", ephemeral=True)
             else:
                 new_channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
-                await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
+                if not interaction.response.is_done():
+                    await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
+                else:
+                    await interaction.followup.send(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
 
-            # 作成後は参加者情報をpersistent_views.jsonに保存して更新
+            # 参加者情報の永続化
             await self.save_persistent_views(interaction)
         except Exception as e:
             print(f"[ERROR] create_callback内で例外: {e}")
             if not interaction.response.is_done():
                 await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+            else:
+                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
 
     async def save_persistent_views(self, interaction):
-        """永続ビューの参加者情報をpersistent_views.jsonに更新保存する"""
         try:
-            # 既存のpersistent_views.jsonを読み込む
             if os.path.exists(PERSISTENT_VIEWS_PATH):
                 with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -102,7 +111,6 @@ class CreateGroupView(View):
             if "creategroup" not in data:
                 data["creategroup"] = []
 
-            # 該当メッセージのentryを更新 or 新規追加
             updated = False
             for entry in data["creategroup"]:
                 if (entry["channel_id"] == interaction.channel.id and
@@ -110,6 +118,7 @@ class CreateGroupView(View):
                     entry["participants"] = list(self.participants)
                     updated = True
                     break
+
             if not updated:
                 data["creategroup"].append({
                     "channel_id": interaction.channel.id,
