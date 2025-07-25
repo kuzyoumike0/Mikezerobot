@@ -16,9 +16,16 @@ class CreateGroupView(View):
         self.participants = set()
         self.message = message
 
-    # 永続ボタンには persistent=True を必須にする
-    @discord.ui.button(label="参加", style=discord.ButtonStyle.primary, persistent=True)
-    async def join(self, interaction: discord.Interaction, button: Button):
+        # persistent=True を付けて明示的にボタンを作成し、callbackを登録する
+        join_button = Button(label="参加", style=discord.ButtonStyle.primary, persistent=True)
+        join_button.callback = self.join_callback
+        self.add_item(join_button)
+
+        create_button = Button(label="作成", style=discord.ButtonStyle.success, persistent=True)
+        create_button.callback = self.create_callback
+        self.add_item(create_button)
+
+    async def join_callback(self, interaction: discord.Interaction):
         user = interaction.user
         self.participants.add(user)
         guild = interaction.guild
@@ -38,8 +45,7 @@ class CreateGroupView(View):
                 content=f"「{self.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: {len(self.participants)}",
                 view=self)
 
-    @discord.ui.button(label="作成", style=discord.ButtonStyle.success, persistent=True)
-    async def create(self, interaction: discord.Interaction, button: Button):
+    async def create_callback(self, interaction: discord.Interaction):
         guild = interaction.guild
         category = discord.utils.get(guild.categories, id=CATEGORY_ID)
         self.participants.add(interaction.user)
