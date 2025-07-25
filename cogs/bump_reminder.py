@@ -15,14 +15,17 @@ class BumpReminder(commands.Cog):
     def load_last_bump_time(self):
         """前回のBUMP時間をファイルから読み込む"""
         if not os.path.exists(LAST_BUMP_FILE):
-            return None
+            # ファイルがない場合、現在時刻から2時間前に設定しておく
+            return datetime.utcnow() - timedelta(hours=2)
         try:
             with open(LAST_BUMP_FILE, "r") as f:
                 data = json.load(f)
+                # ファイルの日時を読み込み
                 return datetime.fromisoformat(data["last_bump_time"])
         except Exception as e:
             print(f"[ERROR] BUMP時刻の読み込み失敗: {e}")
-            return None
+            # 読み込み失敗時も2時間前に設定して通知をすぐに飛ばさない
+            return datetime.utcnow() - timedelta(hours=2)
 
     def save_last_bump_time(self):
         """前回のBUMP時間をファイルに保存する"""
@@ -36,7 +39,7 @@ class BumpReminder(commands.Cog):
     @tasks.loop(minutes=1)
     async def bump_reminder(self):
         now = datetime.utcnow()
-        if self.last_bump_time is None or now - self.last_bump_time >= timedelta(hours=2):
+        if now - self.last_bump_time >= timedelta(hours=2):
             channel = self.bot.get_channel(BUMP_CHANNEL_ID)
             if channel:
                 await channel.send("BUMPをお願いします！")
