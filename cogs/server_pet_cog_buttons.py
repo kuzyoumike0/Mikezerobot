@@ -57,7 +57,7 @@ class PetView(View):
             json.dump(pet, f, ensure_ascii=False, indent=2)
 
     async def update_roles(self, guild: discord.Guild, user: discord.Member, total_exp: int):
-        roles_to_remove = [ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50]
+        roles_to_remove = list(FEED_TITLE_ROLES.values())
         roles_to_add = None
         if total_exp >= 50:
             roles_to_add = ROLE_TITLE_50
