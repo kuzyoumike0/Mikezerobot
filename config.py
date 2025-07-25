@@ -86,8 +86,7 @@ TIME_RANGES = {
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリが存在しなければ作成
-PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "data/persistent_views.json")
-
+PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "persistent_views.json")
 
 # 🔽 時間帯判定と音声ファイル取得関数
 def get_current_period(hour=None):
@@ -105,12 +104,10 @@ def get_current_period(hour=None):
                 return period
     return "unknown"
 
-
 def get_join_sound():
     """現在の時間帯に対応した入室音ファイル名を返す。"""
     period = get_current_period()
     return JOIN_SOUNDS.get(period, None)
-
 
 def get_leave_sound():
     """現在の時間帯に対応した退室音ファイル名を返す。"""
