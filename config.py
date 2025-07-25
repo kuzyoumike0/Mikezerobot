@@ -25,27 +25,23 @@ VC_CHANNEL_IDS = {
     "セッション３": 1397685082369818881
 }
 
-
 # ペット関連のチャンネルID
 PET_HELP_CHANNEL_ID = 1397793018744012880
 PET_RANKING_CHANNEL_ID = 1397794425060589692
 PET_COMMAND_CHANNEL_ID = 1397723707606171759  # !petコマンドを打てるチャンネルID
 
 # ペットの一言を投稿するチャンネルID
-DAILY_POST_CHANNEL_ID = 1398250949239242752   # ペットの今日の一言を投稿するチャンネルI
+DAILY_POST_CHANNEL_ID = 1398250949239242752  # ペットの今日の一言を投稿するチャンネルID
 
-
-# config.py
-
+# 称号ロールID（餌やり回数に応じて付与）
 FEED_TITLE_ROLES = {
     50: 1397794033236971601,  # 伝説の餌やり師😻 のロールID（例）
     30: 1397793748926201886,  # 一人前の餌やり師😸
     10: 1397793352396574720,  # 見習い餌やり師😺
 }
 
-
 # 匿名相談チャンネルID
-ANON_CHANNEL_ID = 1397965805744029706  
+ANON_CHANNEL_ID = 1397965805744029706
 
 # VCカテゴリID（テキストチャンネル作成先）
 VC_CATEGORY_ID = SECRET_CATEGORY_ID
@@ -56,14 +52,14 @@ SPECIAL_ROLE_ID = 1396919553413353503
 # 管理者・モデレーターのロールID
 MOD_ROLE_ID = 1385323031047438437
 
-# creategroupコマンドを許可するチャンネルID
+# creategroupコマンドを許可するチャンネルIDリスト
 CREATEGROUP_ALLOWED_CHANNELS = [1385323336699219979, 1386584590289866814]
 
-# 謎チャンネル
+# 謎チャンネル関連
 MYSTERY_CHANNEL_ID = 1397863394064994395
 MYSTERY_SET_CHANNEL_ID = 1397867367882821793
 
-# 時間帯ごとの音声ファイル名
+# 時間帯ごとの入室音ファイル名
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",
     "afternoon": "join_afternoon.mp3",
@@ -71,6 +67,7 @@ JOIN_SOUNDS = {
     "night": "join_night.mp3",
 }
 
+# 時間帯ごとの退室音ファイル名
 LEAVE_SOUNDS = {
     "morning": "leave_morning.mp3",
     "afternoon": "leave_afternoon.mp3",
@@ -78,21 +75,20 @@ LEAVE_SOUNDS = {
     "night": "leave_night.mp3",
 }
 
-# 時間帯の範囲
+# 時間帯の範囲（24時間表記）
 TIME_RANGES = {
     "morning": (5, 12),
     "afternoon": (12, 17),
     "evening": (17, 22),
-    "night": (22, 5),
+    "night": (22, 5),  # 22時から翌5時までの夜間
 }
 
-# ✅ 追加: persistent_views.json の保存先を定義
+# persistent_views.json の保存先を定義
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリが存在しなければ作成
+os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリがなければ作成
 PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "persistent_views.json")
 
-# 🔽 時間帯判定と音声ファイル取得関数
 def get_current_period(hour=None):
     """現在の時間帯を判定する関数。"""
     if hour is None:
