@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import PET_CHANNEL_ID  # config.pyからチャンネルIDを読み込み
+from config import PET_CHANNEL_ID, FEED_TITLE_ROLES  # チャンネルIDと称号ロールIDをconfigから読み込み
 
 PET_DATA_PATH = "data/pets.json"
 
@@ -48,7 +48,8 @@ class PetView(View):
                 "exp": {"kirakira": 0, "kachikachi": 0, "mochimochi": 0, "fuwafuwa": 0},
                 "last_feed": {},
                 "last_pet": {},
-                "last_walk": {}
+                "last_walk": {},
+                "feed_counts": {}
             }
         with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -65,19 +66,65 @@ class PetView(View):
 
         async def callback(self, interaction: discord.Interaction):
             view: PetView = self.view
-            user_id = str(interaction.user.id)
+            user = interaction.user
+            user_id = str(user.id)
             pet = view.load_pet()
             pet.setdefault("last_feed", {})
+            pet.setdefault("feed_counts", {})
+
             cooldown, mins = is_on_cooldown(pet["last_feed"].get(user_id))
             if cooldown:
                 await interaction.response.send_message(f"⏳ {self.label}はあと{mins}分後にあげられます。", ephemeral=True)
                 return
 
+            # 経験値と機嫌アップ
             pet["exp"][self.key] += self.exp
             pet["last_feed"][user_id] = datetime.utcnow().isoformat()
-            pet["mood"] = min(100, pet.get("mood", 50) + 5)  # 餌で少し機嫌アップ
+            pet["feed_counts"][user_id] = pet["feed_counts"].get(user_id, 0) + 1
+            pet["mood"] = min(100, pet.get("mood", 50) + 5)
             view.save_pet(pet)
+
+            # 称号ロールの更新
+            await self.update_feed_title_role(user, pet["feed_counts"][user_id], interaction.guild)
+
             await interaction.response.send_message(f"{self.emoji} {self.label}をあげました！", ephemeral=True)
+
+        async def update_feed_title_role(self, user: discord.Member, feed_count: int, guild: discord.Guild):
+            roles_to_add = []
+            roles_to_remove = []
+
+            for count_threshold, role_id in FEED_TITLE_ROLES.items():
+                role = guild.get_role(role_id)
+                if not role:
+                    continue
+                if feed_count >= count_threshold:
+                    roles_to_add.append(role)
+                else:
+                    roles_to_remove.append(role)
+
+            # 不要な称号ロールを外す
+            for role in roles_to_remove:
+                if role in user.roles:
+                    try:
+                        await user.remove_roles(role, reason="餌やり称号更新のため")
+                    except Exception:
+                        pass
+
+            # 最大の称号ロールだけ付与
+            if roles_to_add:
+                max_role = max(roles_to_add, key=lambda r: r.position)
+                if max_role not in user.roles:
+                    try:
+                        await user.add_roles(max_role, reason="餌やり称号付与")
+                    except Exception:
+                        pass
+                # 他のロールは外す
+                for role in roles_to_add:
+                    if role != max_role and role in user.roles:
+                        try:
+                            await user.remove_roles(role, reason="餌やり称号整理")
+                        except Exception:
+                            pass
 
     class PetButton(Button):
         def __init__(self, style, emoji):
@@ -123,9 +170,8 @@ class PetGame(commands.Cog):
 
     @commands.command(name="pet")
     async def show_pet(self, ctx):
-        # 指定チャンネルのみ許可（必要なければ削除してください）
         if ctx.channel.id != PET_CHANNEL_ID:
-            await ctx.send(f"このコマンドは指定チャンネルでのみ使用可能です。")
+            await ctx.send("このコマンドは指定チャンネルでのみ使用可能です。")
             return
 
         view = PetView(self.bot, ctx.author)
