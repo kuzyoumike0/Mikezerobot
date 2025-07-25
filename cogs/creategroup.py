@@ -9,15 +9,17 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 
 
 class CreateGroupView(View):
-    def __init__(self, channel_name, message=None):
+    def __init__(self, channel_name, message=None, participants=None):
         # timeout=None により無制限の永続ビュー
         super().__init__(timeout=None)
         self.channel_name = channel_name.lower().replace(" ", "-")
         self.participants = set()
+        if participants:
+            # 参加者IDからMemberオブジェクトは取得できないのでIDのまま保持
+            # 利用時にguildからMemberを取得する方法を後述します
+            self.participants = set(participants)
         self.message = message
 
-        # persistent は discord.py 2.3.0 以降でサポートされています
-        # バージョンによってはエラーになるため削除しました
         join_button = Button(label="参加", style=discord.ButtonStyle.primary)
         join_button.callback = self.join_callback
         self.add_item(join_button)
@@ -27,45 +29,101 @@ class CreateGroupView(View):
         self.add_item(create_button)
 
     async def join_callback(self, interaction: discord.Interaction):
-        user = interaction.user
-        self.participants.add(user)
-        guild = interaction.guild
-        category = discord.utils.get(guild.categories, id=CATEGORY_ID)
-        existing_channel = discord.utils.get(category.text_channels, name=self.channel_name)
+        try:
+            user = interaction.user
+            self.participants.add(user.id)  # IDで保持
 
-        if existing_channel:
-            await existing_channel.set_permissions(user, overwrite=discord.PermissionOverwrite(
-                read_messages=True, send_messages=True))
-            await interaction.response.send_message(
-                f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
-        else:
-            await interaction.response.send_message("参加を記録しました。", ephemeral=True)
+            guild = interaction.guild
+            category = discord.utils.get(guild.categories, id=CATEGORY_ID)
+            existing_channel = discord.utils.get(category.text_channels, name=self.channel_name)
 
-        if self.message:
-            await self.message.edit(
-                content=f"「{self.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: {len(self.participants)}",
-                view=self)
-
-    async def create_callback(self, interaction: discord.Interaction):
-        guild = interaction.guild
-        category = discord.utils.get(guild.categories, id=CATEGORY_ID)
-        self.participants.add(interaction.user)
-
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False)
-        }
-        for user in self.participants:
-            overwrites[user] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
-
-        existing_channel = discord.utils.get(category.text_channels, name=self.channel_name)
-        if existing_channel:
-            for user in self.participants:
+            if existing_channel:
                 await existing_channel.set_permissions(user, overwrite=discord.PermissionOverwrite(
                     read_messages=True, send_messages=True))
-            await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
-        else:
-            new_channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
-            await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
+                await interaction.response.send_message(
+                    f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
+            else:
+                await interaction.response.send_message("参加を記録しました。", ephemeral=True)
+
+            if self.message:
+                await self.message.edit(
+                    content=f"「{self.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: {len(self.participants)}",
+                    view=self)
+        except Exception as e:
+            print(f"[ERROR] join_callback内で例外: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+
+    async def create_callback(self, interaction: discord.Interaction):
+        try:
+            guild = interaction.guild
+            category = discord.utils.get(guild.categories, id=CATEGORY_ID)
+            self.participants.add(interaction.user.id)
+
+            overwrites = {
+                guild.default_role: discord.PermissionOverwrite(read_messages=False)
+            }
+
+            # IDからMemberオブジェクトを取得してpermission設定
+            members = []
+            for user_id in self.participants:
+                member = guild.get_member(user_id)
+                if member:
+                    members.append(member)
+                    overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+
+            existing_channel = discord.utils.get(category.text_channels, name=self.channel_name)
+            if existing_channel:
+                for member in members:
+                    await existing_channel.set_permissions(member, overwrite=discord.PermissionOverwrite(
+                        read_messages=True, send_messages=True))
+                await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
+            else:
+                new_channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
+                await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
+
+            # 作成後は参加者情報をpersistent_views.jsonに保存して更新
+            await self.save_persistent_views(interaction)
+        except Exception as e:
+            print(f"[ERROR] create_callback内で例外: {e}")
+            if not interaction.response.is_done():
+                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
+
+    async def save_persistent_views(self, interaction):
+        """永続ビューの参加者情報をpersistent_views.jsonに更新保存する"""
+        try:
+            # 既存のpersistent_views.jsonを読み込む
+            if os.path.exists(PERSISTENT_VIEWS_PATH):
+                with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+            else:
+                data = {}
+
+            if "creategroup" not in data:
+                data["creategroup"] = []
+
+            # 該当メッセージのentryを更新 or 新規追加
+            updated = False
+            for entry in data["creategroup"]:
+                if (entry["channel_id"] == interaction.channel.id and
+                        entry["message_id"] == self.message.id):
+                    entry["participants"] = list(self.participants)
+                    updated = True
+                    break
+            if not updated:
+                data["creategroup"].append({
+                    "channel_id": interaction.channel.id,
+                    "message_id": self.message.id,
+                    "channel_name": self.channel_name,
+                    "participants": list(self.participants)
+                })
+
+            os.makedirs(os.path.dirname(PERSISTENT_VIEWS_PATH), exist_ok=True)
+            with open(PERSISTENT_VIEWS_PATH, "w", encoding="utf-8") as f:
+                json.dump(data, f, indent=4)
+            print("[CreateGroupView] persistent_views.json に参加者情報を更新保存しました。")
+        except Exception as e:
+            print(f"[ERROR] save_persistent_viewsで例外: {e}")
 
 
 class CreateGroup(commands.Cog):
@@ -94,12 +152,16 @@ class CreateGroup(commands.Cog):
 
         # 永続ビュー情報をpersistent_views.jsonに保存
         try:
-            with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                print("[creategroup] persistent_views.json 読み込み成功")
-        except (FileNotFoundError, json.JSONDecodeError):
+            if os.path.exists(PERSISTENT_VIEWS_PATH):
+                with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    print("[creategroup] persistent_views.json 読み込み成功")
+            else:
+                data = {}
+                print("[creategroup] persistent_views.json が存在しないため新規作成")
+        except json.JSONDecodeError:
             data = {}
-            print("[creategroup] persistent_views.json が存在しないか壊れているため新規作成")
+            print("[creategroup] persistent_views.json が壊れているため新規作成")
 
         if "creategroup" not in data:
             data["creategroup"] = []
@@ -107,7 +169,8 @@ class CreateGroup(commands.Cog):
         data["creategroup"].append({
             "channel_id": ctx.channel.id,
             "message_id": message.id,
-            "channel_name": view.channel_name
+            "channel_name": view.channel_name,
+            "participants": []  # 新規作成時は空
         })
 
         os.makedirs(os.path.dirname(PERSISTENT_VIEWS_PATH), exist_ok=True)
@@ -139,7 +202,8 @@ class CreateGroup(commands.Cog):
                 continue
             try:
                 message = await channel.fetch_message(entry["message_id"])
-                view = CreateGroupView(entry["channel_name"], message)
+                participants = entry.get("participants", [])
+                view = CreateGroupView(entry["channel_name"], message, participants)
                 self.bot.add_view(view)
                 print(f"[load_persistent_views] メッセージID {entry['message_id']} のビューを追加しました。")
             except discord.NotFound:
