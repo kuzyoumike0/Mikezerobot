@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import PET_CHANNEL_ID, FEED_TITLE_ROLES  # チャンネルIDと称号ロールIDをconfigから読み込み
+from config import PET_COMMAND_CHANNEL_ID as PET_CHANNEL_ID, FEED_TITLE_ROLES
 
 PET_DATA_PATH = "data/pets.json"
 
@@ -41,7 +41,6 @@ class PetView(View):
 
     def load_pet(self):
         if not os.path.exists(PET_DATA_PATH):
-            # 初期状態
             return {
                 "personality": "ふわふわ",
                 "mood": 50,
@@ -77,14 +76,12 @@ class PetView(View):
                 await interaction.response.send_message(f"⏳ {self.label}はあと{mins}分後にあげられます。", ephemeral=True)
                 return
 
-            # 経験値と機嫌アップ
             pet["exp"][self.key] += self.exp
             pet["last_feed"][user_id] = datetime.utcnow().isoformat()
             pet["feed_counts"][user_id] = pet["feed_counts"].get(user_id, 0) + 1
             pet["mood"] = min(100, pet.get("mood", 50) + 5)
             view.save_pet(pet)
 
-            # 称号ロールの更新
             await self.update_feed_title_role(user, pet["feed_counts"][user_id], interaction.guild)
 
             await interaction.response.send_message(f"{self.emoji} {self.label}をあげました！", ephemeral=True)
@@ -102,7 +99,6 @@ class PetView(View):
                 else:
                     roles_to_remove.append(role)
 
-            # 不要な称号ロールを外す
             for role in roles_to_remove:
                 if role in user.roles:
                     try:
@@ -110,7 +106,6 @@ class PetView(View):
                     except Exception:
                         pass
 
-            # 最大の称号ロールだけ付与
             if roles_to_add:
                 max_role = max(roles_to_add, key=lambda r: r.position)
                 if max_role not in user.roles:
@@ -118,7 +113,6 @@ class PetView(View):
                         await user.add_roles(max_role, reason="餌やり称号付与")
                     except Exception:
                         pass
-                # 他のロールは外す
                 for role in roles_to_add:
                     if role != max_role and role in user.roles:
                         try:
