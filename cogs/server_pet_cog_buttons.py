@@ -26,28 +26,35 @@ MOOD_DECREASE_AMOUNT = 15
 if not os.path.exists("data"):
     os.makedirs("data")
 if not os.path.exists(PET_DATA_PATH):
-    with open(PET_DATA_PATH, "w") as f:
-        json.dump({"personality": "まるまる", "mood": 100, "experience": {}, "last_actions": {}, "evolved": False}, f)
+    with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
+        json.dump({
+            "personality": "fuwafuwa",
+            "mood": 100,
+            "experience": {},
+            "last_actions": {},
+            "evolved": False
+        }, f, ensure_ascii=False, indent=4)
 
 # データ読み書き関数
 def load_pet():
-    with open(PET_DATA_PATH, "r") as f:
+    with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
 def save_pet(data):
-    with open(PET_DATA_PATH, "w") as f:
+    with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
 
-# 性格別画像取得
+# 性格と機嫌から画像取得
 def get_image(personality, mood):
     mood_type = "happy" if mood >= 70 else "neutral" if mood >= 30 else "angry"
-    if personality == "まるまる":
-        filename = f"pet_marumaru_{mood_type}.png"
-    else:
-        filename = f"pet_{personality}_{mood_type}.png"
-    return os.path.join(PET_IMAGES_PATH, filename)
+    filename = f"pet_{personality}_{mood_type}.png"
+    path = os.path.join(PET_IMAGES_PATH, filename)
+    if not os.path.exists(path):
+        # 予備画像
+        path = os.path.join(PET_IMAGES_PATH, "pet_fuwafuwa_neutral.png")
+    return path
 
-# ペット表示用ビュー
+# ビュー定義
 class PetView(View):
     def __init__(self, bot, user):
         super().__init__(timeout=None)
@@ -69,7 +76,7 @@ class FeedButton(Button):
 
         data = load_pet()
         now = datetime.datetime.utcnow().timestamp()
-        action_key = f"{interaction.user.id}_feed"
+        action_key = f"{interaction.user.id}_feed_{self.label}"
         last_time = data["last_actions"].get(action_key, 0)
 
         if now - last_time < COOLDOWN:
@@ -132,6 +139,7 @@ class PatButton(Button):
         save_pet(data)
         await interaction.response.send_message("撫でました！", ephemeral=True)
 
+# コグ定義
 class PetBot(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -146,11 +154,12 @@ class PetBot(commands.Cog):
         file_path = get_image(data["personality"], data["mood"])
         file = discord.File(file_path, filename="pet.png")
 
-        embed = discord.Embed(title="✨ ミルクシュガーの状態 ✨")
+        embed = discord.Embed(title="✨ ミルクシュガーの状態 ✨", color=0xffc0cb)
         embed.set_image(url="attachment://pet.png")
         embed.add_field(name="性格", value=data["personality"], inline=True)
-        embed.add_field(name="機嫌", value=str(data["mood"]), inline=True)
-        embed.add_field(name="経験値", value=str(data["experience"]), inline=False)
+        embed.add_field(name="機嫌", value=f"{data['mood']}/100", inline=True)
+        exp_display = "\n".join([f"{k}: {v}" for k, v in data.get("experience", {}).items()])
+        embed.add_field(name="経験値", value=exp_display or "なし", inline=False)
 
         await ctx.send(embed=embed, file=file, view=PetView(self.bot, ctx.author))
 
@@ -160,5 +169,10 @@ class PetBot(commands.Cog):
         data["mood"] = max(0, data["mood"] - MOOD_DECREASE_AMOUNT)
         save_pet(data)
 
+    @mood_task.before_loop
+    async def before_mood_task(self):
+        await self.bot.wait_until_ready()
+
+# 起動時に呼ばれる関数
 async def setup(bot):
     await bot.add_cog(PetBot(bot))
