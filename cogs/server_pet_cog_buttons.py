@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import FEED_TITLE_ROLES
+from config import FEED_TITLE_ROLES, PET_COMMAND_CHANNEL_ID, ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50
 
 PET_DATA_PATH = "data/pets.json"
 
@@ -66,13 +66,11 @@ class PetView(View):
         elif total_exp >= 10:
             roles_to_add = ROLE_TITLE_10
 
-        # まず称号ロールを外す
         for role_id in roles_to_remove:
             role = guild.get_role(role_id)
             if role and role in user.roles:
                 await user.remove_roles(role)
 
-        # 条件を満たすロールを付与
         if roles_to_add:
             role = guild.get_role(roles_to_add)
             if role and role not in user.roles:
@@ -99,7 +97,6 @@ class PetView(View):
             pet["mood"] = min(100, pet.get("mood", 50) + 5)
             view.save_pet(pet)
 
-            # 称号ロール更新
             total_exp = sum(pet.get("exp", {}).values())
             guild = interaction.guild
             user = interaction.user
@@ -170,5 +167,4 @@ class PetGame(commands.Cog):
         await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
-    await bot.add_cog(ペットゲーム(bot))
-
+    await bot.add_cog(PetGame(bot))
