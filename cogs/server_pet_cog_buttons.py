@@ -5,8 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-
-ffrom config import PET_COMMAND_CHANNEL_ID
+from config import PET_COMMAND_CHANNEL_ID, ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50
 
 PET_DATA_PATH = "data/pets.json"
 
@@ -152,7 +151,7 @@ class PetGame(commands.Cog):
 
     @commands.command(name="pet")
     async def show_pet(self, ctx):
-        if ctx.channel.id != PET_CHANNEL_ID:
+        if ctx.channel.id != PET_COMMAND_CHANNEL_ID:
             await ctx.send("このコマンドは指定チャンネルでのみ使用可能です。")
             return
 
