@@ -5,196 +5,166 @@ import json
 import os
 import datetime
 
-# 設定ファイルパス
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
-
-# 餌の種類と経験値
+MOOD_DECREASE_INTERVAL = 2  # 時間
+MOOD_DECREASE_AMOUNT = 15
+EXPERIENCE_THRESHOLD = 100
+ACTION_COOLDOWN = datetime.timedelta(hours=1)
 FOOD_VALUES = {
-    "キラキラ": ("kirakira", 10),
-    "カチカチ": ("kachikachi", 10),
-    "もちもち": ("mochimochi", 10),
-    "ふわふわ": ("fuwafuwa", 10)
+    "キラキラ": 10,
+    "カチカチ": 10,
+    "もちもち": 10,
+    "ふわふわ": 10
 }
 
-# 各操作のクールダウン（秒）
-COOLDOWN = 3600
-MOOD_DECREASE_INTERVAL = 7200
-MOOD_DECREASE_AMOUNT = 15
+class PetView(View):
+    def __init__(self, bot, data, user_id):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.data = data
+        self.user_id = str(user_id)
 
-# 初期化
-if not os.path.exists("data"):
-    os.makedirs("data")
-if not os.path.exists(PET_DATA_PATH):
-    with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
-        json.dump({}, f, ensure_ascii=False, indent=4)
+        for food in FOOD_VALUES:
+            self.add_item(FeedButton(bot, food, label=food, style=discord.ButtonStyle.primary))
+        self.add_item(WalkButton(bot))
+        self.add_item(PetButton(bot))
 
-# データ読み書き関数
-def load_all_pets():
+class FeedButton(Button):
+    def __init__(self, bot, food, **kwargs):
+        super().__init__(**kwargs)
+        self.bot = bot
+        self.food = food
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        data = load_pet_data()
+
+        if not is_action_allowed(user_id, self.food, data["last_actions"]):
+            await interaction.response.send_message("その餌はまだあげられません（1時間に1回まで）", ephemeral=True)
+            return
+
+        data["experience"][self.food] += FOOD_VALUES[self.food]
+        update_last_action(user_id, self.food, data["last_actions"])
+        check_evolution(data)
+        save_pet_data(data)
+
+        await interaction.response.edit_message(embed=create_pet_embed(data), view=PetView(self.bot, data, user_id))
+
+class WalkButton(Button):
+    def __init__(self, bot):
+        super().__init__(label="散歩", style=discord.ButtonStyle.success)
+        self.bot = bot
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        data = load_pet_data()
+
+        if not is_action_allowed(user_id, "散歩", data["last_actions"]):
+            await interaction.response.send_message("散歩は1時間に1回までです。", ephemeral=True)
+            return
+
+        data["mood"] = min(100, data["mood"] + 10)
+        update_last_action(user_id, "散歩", data["last_actions"])
+        save_pet_data(data)
+
+        await interaction.response.edit_message(embed=create_pet_embed(data), view=PetView(self.bot, data, user_id))
+
+class PetButton(Button):
+    def __init__(self, bot):
+        super().__init__(label="撫でる", style=discord.ButtonStyle.secondary)
+        self.bot = bot
+
+    async def callback(self, interaction: discord.Interaction):
+        user_id = str(interaction.user.id)
+        data = load_pet_data()
+
+        if not is_action_allowed(user_id, "撫でる", data["last_actions"]):
+            await interaction.response.send_message("撫でるのは1時間に1回までです。", ephemeral=True)
+            return
+
+        data["mood"] = min(100, data["mood"] + 5)
+        update_last_action(user_id, "撫でる", data["last_actions"])
+        save_pet_data(data)
+
+        await interaction.response.edit_message(embed=create_pet_embed(data), view=PetView(self.bot, data, user_id))
+
+def load_pet_data():
+    if not os.path.exists(PET_DATA_PATH):
+        return {
+            "name": "ミルクシュガー",
+            "mood": 100,
+            "personality": "まるまる",
+            "experience": {food: 0 for food in FOOD_VALUES},
+            "last_actions": {},
+            "evolution_stage": 0
+        }
     with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
         return json.load(f)
 
-def save_all_pets(data):
+def save_pet_data(data):
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+        json.dump(data, f, indent=2, ensure_ascii=False)
 
-def ensure_pet_data(guild_id):
-    data = load_all_pets()
-    str_gid = str(guild_id)
-    if str_gid not in data:
-        data[str_gid] = {
-            "personality": "fuwafuwa",
-            "mood": 100,
-            "experience": {},
-            "last_actions": {},
-            "evolved": False
-        }
-        save_all_pets(data)
-    return data
+def is_action_allowed(user_id, action, last_actions):
+    user_actions = last_actions.get(user_id, {})
+    last_time_str = user_actions.get(action)
+    if last_time_str:
+        last_time = datetime.datetime.fromisoformat(last_time_str)
+        if datetime.datetime.now() - last_time < ACTION_COOLDOWN:
+            return False
+    return True
 
-# 性格と機嫌から画像取得
-def get_image(personality, mood):
-    mood_type = "happy" if mood >= 70 else "neutral" if mood >= 30 else "angry"
-    filename = f"pet_{personality}_{mood_type}.png"
-    path = os.path.join(PET_IMAGES_PATH, filename)
-    if not os.path.exists(path):
-        path = os.path.join(PET_IMAGES_PATH, "pet_fuwafuwa_neutral.png")
-    return path
+def update_last_action(user_id, action, last_actions):
+    if user_id not in last_actions:
+        last_actions[user_id] = {}
+    last_actions[user_id][action] = datetime.datetime.now().isoformat()
 
-# ビュー定義
-class PetView(View):
-    def __init__(self, bot, user, guild_id):
-        super().__init__(timeout=None)
-        self.bot = bot
-        self.user = user
-        self.guild_id = guild_id
-        for label in FOOD_VALUES.keys():
-            self.add_item(FeedButton(label, self.user, self.guild_id))
-        self.add_item(WalkButton(self.user, self.guild_id))
-        self.add_item(PatButton(self.user, self.guild_id))
+def check_evolution(data):
+    for food, value in data["experience"].items():
+        if value >= EXPERIENCE_THRESHOLD:
+            data["personality"] = food
+            data["evolution_stage"] += 1
+            for k in data["experience"]:
+                data["experience"][k] = 0
+            break
 
-class FeedButton(Button):
-    def __init__(self, label, user, guild_id):
-        super().__init__(label=label, style=discord.ButtonStyle.primary)
-        self.user = user
-        self.guild_id = guild_id
+def create_pet_embed(data):
+    embed = discord.Embed(title=f"{data['name']}のようす",
+                          description=f"性格: {data['personality']}\n機嫌: {data['mood']}/100",
+                          color=discord.Color.pink())
+    image_filename = f"pet_{data['personality']}_angry.png" if data['mood'] < 30 else f"pet_{data['personality']}_normal.png"
+    image_path = os.path.join(PET_IMAGES_PATH, image_filename)
+    if os.path.exists(image_path):
+        file = discord.File(image_path, filename="pet.png")
+        embed.set_image(url="attachment://pet.png")
+        return embed, file
+    return embed, None
 
-    async def callback(self, interaction):
-        if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
-
-        data = ensure_pet_data(interaction.guild.id)
-        now = datetime.datetime.utcnow().timestamp()
-        gid = str(self.guild_id)
-        action_key = f"{interaction.user.id}_feed_{self.label}"
-        last_time = data[gid]["last_actions"].get(action_key, 0)
-
-        if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("餌は1時間に1回までです。", ephemeral=True)
-
-        food_key, exp = FOOD_VALUES[self.label]
-        data[gid]["experience"][food_key] = data[gid]["experience"].get(food_key, 0) + exp
-        data[gid]["last_actions"][action_key] = now
-
-        # 進化処理
-        if data[gid]["experience"][food_key] >= 100:
-            data[gid]["personality"] = food_key
-            data[gid]["experience"][food_key] = 0
-            data[gid]["evolved"] = True
-
-        save_all_pets(data)
-        await interaction.response.send_message(f"{self.label}をあげました！", ephemeral=True)
-
-class WalkButton(Button):
-    def __init__(self, user, guild_id):
-        super().__init__(label="散歩", style=discord.ButtonStyle.success)
-        self.user = user
-        self.guild_id = guild_id
-
-    async def callback(self, interaction):
-        if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
-
-        data = ensure_pet_data(interaction.guild.id)
-        gid = str(self.guild_id)
-        now = datetime.datetime.utcnow().timestamp()
-        action_key = f"{interaction.user.id}_walk"
-        last_time = data[gid]["last_actions"].get(action_key, 0)
-
-        if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("散歩は1時間に1回までです。", ephemeral=True)
-
-        data[gid]["mood"] = min(100, data[gid].get("mood", 100) + 10)
-        data[gid]["last_actions"][action_key] = now
-        save_all_pets(data)
-        await interaction.response.send_message("散歩しました！", ephemeral=True)
-
-class PatButton(Button):
-    def __init__(self, user, guild_id):
-        super().__init__(label="撫でる", style=discord.ButtonStyle.secondary)
-        self.user = user
-        self.guild_id = guild_id
-
-    async def callback(self, interaction):
-        if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
-
-        data = ensure_pet_data(interaction.guild.id)
-        gid = str(self.guild_id)
-        now = datetime.datetime.utcnow().timestamp()
-        action_key = f"{interaction.user.id}_pat"
-        last_time = data[gid]["last_actions"].get(action_key, 0)
-
-        if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("撫でるのは1時間に1回までです。", ephemeral=True)
-
-        data[gid]["mood"] = min(100, data[gid].get("mood", 100) + 5)
-        data[gid]["last_actions"][action_key] = now
-        save_all_pets(data)
-        await interaction.response.send_message("撫でました！", ephemeral=True)
-
-# コグ定義
-class PetBot(commands.Cog):
+class ServerPetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.mood_task.start()
 
-    def cog_unload(self):
-        self.mood_task.cancel()
-
     @commands.command(name="pet")
-    async def show_pet(self, ctx):
-        data = ensure_pet_data(ctx.guild.id)
-        gid = str(ctx.guild.id)
-        file_path = get_image(data[gid]["personality"], data[gid]["mood"])
-        file = discord.File(file_path, filename="pet.png")
+    async def pet_command(self, ctx):
+        data = load_pet_data()
+        embed, file = create_pet_embed(data)
+        view = PetView(self.bot, data, ctx.author.id)
+        if file:
+            await ctx.send(embed=embed, view=view, file=file)
+        else:
+            await ctx.send(embed=embed, view=view)
 
-        embed = discord.Embed(title="✨ ミルクシュガーの状態 ✨", color=0xffc0cb)
-        embed.set_image(url="attachment://pet.png")
-        embed.add_field(name="性格", value=data[gid]["personality"], inline=True)
-        embed.add_field(name="機嫌", value=f"{data[gid]['mood']}/100", inline=True)
-        exp_display = "\n".join([f"{k}: {v}" for k, v in data[gid].get("experience", {}).items()])
-        embed.add_field(name="経験値", value=exp_display or "なし", inline=False)
-
-        await ctx.send(embed=embed, file=file, view=PetView(self.bot, ctx.author, ctx.guild.id))
-
-    @tasks.loop(seconds=MOOD_DECREASE_INTERVAL)
+    @tasks.loop(hours=MOOD_DECREASE_INTERVAL)
     async def mood_task(self):
-        data = load_all_pets()
-        updated = False
-        for gid in data:
-            mood = data[gid].get("mood", 100)
-            new_mood = max(0, mood - MOOD_DECREASE_AMOUNT)
-            if new_mood != mood:
-                data[gid]["mood"] = new_mood
-                updated = True
-        if updated:
-            save_all_pets(data)
+        data = load_pet_data()
+        data["mood"] = max(0, data["mood"] - MOOD_DECREASE_AMOUNT)
+        save_pet_data(data)
 
     @mood_task.before_loop
     async def before_mood_task(self):
         await self.bot.wait_until_ready()
 
-# 起動時に呼ばれる関数
-async def setup(bot):
-    await bot.add_cog(PetBot(bot))
+def setup(bot):
+    bot.add_cog(ServerPetCog(bot))
