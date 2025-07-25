@@ -74,9 +74,10 @@ class FeedButton(Button):
         super().__init__(label=label, style=discord.ButtonStyle.primary)
         self.user = user
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            return
 
         data = load_pet()
         now = datetime.datetime.utcnow().timestamp()
@@ -84,7 +85,8 @@ class FeedButton(Button):
         last_time = data["last_actions"].get(action_key, 0)
 
         if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("餌は1時間に1回までです。", ephemeral=True)
+            await interaction.response.send_message("餌は1時間に1回までです。", ephemeral=True)
+            return
 
         food_key, exp = FOOD_VALUES[self.label]
         data["experience"][food_key] = data["experience"].get(food_key, 0) + exp
@@ -104,9 +106,10 @@ class WalkButton(Button):
         super().__init__(label="散歩", style=discord.ButtonStyle.success)
         self.user = user
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            return
 
         data = load_pet()
         now = datetime.datetime.utcnow().timestamp()
@@ -114,7 +117,8 @@ class WalkButton(Button):
         last_time = data["last_actions"].get(action_key, 0)
 
         if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("散歩は1時間に1回までです。", ephemeral=True)
+            await interaction.response.send_message("散歩は1時間に1回までです。", ephemeral=True)
+            return
 
         data["mood"] = min(100, data.get("mood", 100) + 10)
         data["last_actions"][action_key] = now
@@ -126,9 +130,10 @@ class PatButton(Button):
         super().__init__(label="撫でる", style=discord.ButtonStyle.secondary)
         self.user = user
 
-    async def callback(self, interaction):
+    async def callback(self, interaction: discord.Interaction):
         if interaction.user != self.user:
-            return await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            await interaction.response.send_message("これはあなたの操作ではありません。", ephemeral=True)
+            return
 
         data = load_pet()
         now = datetime.datetime.utcnow().timestamp()
@@ -136,7 +141,8 @@ class PatButton(Button):
         last_time = data["last_actions"].get(action_key, 0)
 
         if now - last_time < COOLDOWN:
-            return await interaction.response.send_message("撫でるのは1時間に1回までです。", ephemeral=True)
+            await interaction.response.send_message("撫でるのは1時間に1回までです。", ephemeral=True)
+            return
 
         data["mood"] = min(100, data.get("mood", 100) + 5)
         data["last_actions"][action_key] = now
@@ -170,7 +176,6 @@ class PetBot(commands.Cog):
     @tasks.loop(seconds=MOOD_DECREASE_INTERVAL)
     async def mood_task(self):
         data = load_pet()
-        # moodキーがなければ100で初期化
         mood = data.get("mood", 100)
         data["mood"] = max(0, mood - MOOD_DECREASE_AMOUNT)
         save_pet(data)
