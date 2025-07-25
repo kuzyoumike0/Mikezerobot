@@ -5,7 +5,8 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import PET_CHANNEL_ID, ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50  # configからロールID読み込み
+
+ffrom config import PET_COMMAND_CHANNEL_ID
 
 PET_DATA_PATH = "data/pets.json"
 
