@@ -1,124 +1,136 @@
 import discord
 from discord.ext import commands
-from discord.ui import Button, View
-import json
+from discord.ui import View, button
 import os
-import random
+import json
+from datetime import datetime
 
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 
-# 餌と性格の対応
 FOOD_VALUES = {
-    "キラキラ": "kirakira",
-    "カチカチ": "kachikachi",
-    "もちもち": "mochimochi",
-    "ふわふわ": "fuwafuwa"
+    "キラキラ": 10,
+    "カチカチ": 10,
+    "もちもち": 10,
+    "ふわふわ": 10
 }
 
-MOODS = ["happy", "neutral", "angry"]
-
-# 初期状態の性格
-INITIAL_PERSONALITY = "fuwafuwa"
+# 初期性格
+INITIAL_PERSONALITY = "まるまる"
 
 def load_pet_data():
-    if not os.path.exists(PET_DATA_PATH):
-        return {}
-    with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    if os.path.exists(PET_DATA_PATH):
+        with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
 
 def save_pet_data(data):
+    os.makedirs(os.path.dirname(PET_DATA_PATH), exist_ok=True)
     with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
+        json.dump(data, f, ensure_ascii=False, indent=2)
 
-def determine_personality(feed_counts):
-    if sum(feed_counts.values()) < 100:
-        return None  # 進化しない
-    return max(feed_counts, key=feed_counts.get)
+def get_image_path(personality, mood):
+    base_personality = personality
+    if personality == "まるまる":
+        base_personality = "neutral"  # 仮に neutral を割り当てても存在しない可能性があるので注意
+    filename = f"pet_{base_personality}_{mood}.png"
+    return os.path.join(PET_IMAGES_PATH, filename)
 
-def get_mood():
-    return random.choice(MOODS)
-
-class FeedView(View):
-    def __init__(self, bot, user_id):
+class PetActionView(View):
+    def __init__(self, bot, guild_id):
         super().__init__(timeout=None)
         self.bot = bot
-        self.user_id = user_id
+        self.guild_id = str(guild_id)
 
-        for food in FOOD_VALUES.keys():
-            self.add_item(self.create_food_button(food))
+    @button(label="撫でる", style=discord.ButtonStyle.primary, custom_id="pet_nade")
+    async def nade_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "撫でる")
 
-    def create_food_button(self, food_type):
-        label = food_type
-        custom_id = f"feed_{food_type}_{self.user_id}"
+    @button(label="散歩", style=discord.ButtonStyle.success, custom_id="pet_walk")
+    async def walk_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "散歩")
 
-        async def callback(interaction: discord.Interaction):
-            if interaction.user.id != self.user_id:
-                await interaction.response.send_message("これはあなたのペットではありません。", ephemeral=True)
-                return
+    @button(label="キラキラ", style=discord.ButtonStyle.secondary, custom_id="pet_feed_kirakira")
+    async def feed_kirakira_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "キラキラ")
 
-            pet_data = load_pet_data()
-            user_id = str(interaction.user.id)
-            if user_id not in pet_data:
-                pet_data[user_id] = {
-                    "personality": INITIAL_PERSONALITY,
-                    "feed_counts": {key: 0 for key in FOOD_VALUES.values()}
-                }
+    @button(label="カチカチ", style=discord.ButtonStyle.secondary, custom_id="pet_feed_kachikachi")
+    async def feed_kachikachi_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "カチカチ")
 
-            personality = pet_data[user_id]["personality"]
-            feed_counts = pet_data[user_id]["feed_counts"]
+    @button(label="もちもち", style=discord.ButtonStyle.secondary, custom_id="pet_feed_mochimochi")
+    async def feed_mochimochi_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "もちもち")
 
-            personality_key = FOOD_VALUES[food_type]
-            feed_counts[personality_key] += 10
+    @button(label="ふわふわ", style=discord.ButtonStyle.secondary, custom_id="pet_feed_fuwafuwa")
+    async def feed_fuwafuwa_button(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await self.handle_action(interaction, "ふわふわ")
 
-            if sum(feed_counts.values()) >= 100:
-                new_personality = determine_personality(feed_counts)
-                if new_personality:
-                    pet_data[user_id]["personality"] = new_personality
-                    pet_data[user_id]["feed_counts"] = {key: 0 for key in FOOD_VALUES.values()}
-                    personality = new_personality
+    async def handle_action(self, interaction: discord.Interaction, action: str):
+        pet_data = load_pet_data()
+        guild_data = pet_data.get(self.guild_id, {
+            "exp": 0,
+            "personality": INITIAL_PERSONALITY,
+            "mood": "neutral"
+        })
 
-            save_pet_data(pet_data)
+        if action in FOOD_VALUES:
+            guild_data["exp"] += FOOD_VALUES[action]
+            # 性格を餌に応じて変化（最後に与えた餌のタイプ）
+            guild_data["personality"] = action
+            guild_data["mood"] = "happy"
+        elif action == "撫でる":
+            guild_data["mood"] = "happy"
+        elif action == "散歩":
+            guild_data["mood"] = "neutral"
 
-            mood = get_mood()
-            image_file = f"pet_{personality}_{mood}.png"
-            image_path = os.path.join(PET_IMAGES_PATH, image_file)
+        pet_data[self.guild_id] = guild_data
+        save_pet_data(pet_data)
 
-            embed = discord.Embed(title="あなたのペットの様子", description=f"性格: {personality}\n機嫌: {mood}", color=0xabcdef)
-            file = discord.File(image_path, filename=image_file)
-            embed.set_image(url=f"attachment://{image_file}")
+        embed = discord.Embed(
+            title="あなたのペット",
+            description=f"性格: {guild_data['personality']}\n機嫌: {guild_data['mood']}\n経験値: {guild_data['exp']}",
+            color=discord.Color.green()
+        )
 
-            await interaction.response.edit_message(embed=embed, attachments=[file], view=self)
+        image_path = get_image_path(guild_data["personality"], guild_data["mood"])
+        if os.path.exists(image_path):
+            file = discord.File(image_path, filename="pet.png")
+            embed.set_image(url="attachment://pet.png")
+            await interaction.response.send_message(embed=embed, file=file, ephemeral=True)
+        else:
+            await interaction.response.send_message(embed=embed, ephemeral=True)
 
-        return Button(label=label, style=discord.ButtonStyle.primary, custom_id=custom_id, row=0, callback=callback)
-
-class ServerPetCog(commands.Cog):
+class PetCog(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
     @commands.command(name="pet")
-    async def show_pet(self, ctx):
-        user_id = str(ctx.author.id)
+    async def pet_command(self, ctx):
+        """ペットの状態を表示"""
         pet_data = load_pet_data()
+        guild_id = str(ctx.guild.id)
+        guild_data = pet_data.get(guild_id, {
+            "exp": 0,
+            "personality": INITIAL_PERSONALITY,
+            "mood": "neutral"
+        })
 
-        if user_id not in pet_data:
-            pet_data[user_id] = {
-                "personality": INITIAL_PERSONALITY,
-                "feed_counts": {key: 0 for key in FOOD_VALUES.values()}
-            }
-            save_pet_data(pet_data)
+        embed = discord.Embed(
+            title="あなたのペット",
+            description=f"性格: {guild_data['personality']}\n機嫌: {guild_data['mood']}\n経験値: {guild_data['exp']}",
+            color=discord.Color.green()
+        )
 
-        personality = pet_data[user_id]["personality"]
-        mood = get_mood()
-        image_file = f"pet_{personality}_{mood}.png"
-        image_path = os.path.join(PET_IMAGES_PATH, image_file)
+        image_path = get_image_path(guild_data["personality"], guild_data["mood"])
+        view = PetActionView(self.bot, ctx.guild.id)
 
-        embed = discord.Embed(title="あなたのペット", description=f"性格: {personality}\n機嫌: {mood}", color=0xabcdef)
-        file = discord.File(image_path, filename=image_file)
-        embed.set_image(url=f"attachment://{image_file}")
-
-        view = FeedView(self.bot, ctx.author.id)
-        await ctx.send(embed=embed, file=file, view=view)
+        if os.path.exists(image_path):
+            file = discord.File(image_path, filename="pet.png")
+            embed.set_image(url="attachment://pet.png")
+            await ctx.send(embed=embed, file=file, view=view)
+        else:
+            await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
-    await bot.add_cog(ServerPetCog(bot))
+    await bot.add_cog(PetCog(bot))
