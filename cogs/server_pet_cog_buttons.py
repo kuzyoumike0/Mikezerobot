@@ -5,7 +5,10 @@ import json
 import os
 from datetime import datetime, timedelta
 
+from config import PET_CHANNEL_ID  # config.pyからチャンネルIDを読み込み
+
 PET_DATA_PATH = "data/pets.json"
+
 FOOD_VALUES = {
     "キラキラ": ("kirakira", 10, "🍬"),
     "カチカチ": ("kachikachi", 10, "🧊"),
@@ -30,21 +33,22 @@ class PetView(View):
         self.bot = bot
         self.author = author
 
-        # 餌ボタンを追加
         for name, (key, exp, emoji) in FOOD_VALUES.items():
             self.add_item(self.FeedButton(label=name, style=discord.ButtonStyle.primary, emoji=emoji, key=key, exp=exp))
 
-        # 撫でる・散歩ボタン
         self.add_item(self.PetButton(style=discord.ButtonStyle.secondary, emoji="🤗"))
         self.add_item(self.WalkButton(style=discord.ButtonStyle.success, emoji="🐾"))
 
     def load_pet(self):
         if not os.path.exists(PET_DATA_PATH):
+            # 初期状態
             return {
                 "personality": "ふわふわ",
                 "mood": 50,
                 "exp": {"kirakira": 0, "kachikachi": 0, "mochimochi": 0, "fuwafuwa": 0},
-                "last_feed": {}, "last_pet": {}, "last_walk": {}
+                "last_feed": {},
+                "last_pet": {},
+                "last_walk": {}
             }
         with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
             return json.load(f)
@@ -71,7 +75,7 @@ class PetView(View):
 
             pet["exp"][self.key] += self.exp
             pet["last_feed"][user_id] = datetime.utcnow().isoformat()
-            pet["mood"] = min(100, pet.get("mood", 50) + 5)  # 餌でちょっと機嫌UP
+            pet["mood"] = min(100, pet.get("mood", 50) + 5)  # 餌で少し機嫌アップ
             view.save_pet(pet)
             await interaction.response.send_message(f"{self.emoji} {self.label}をあげました！", ephemeral=True)
 
@@ -119,7 +123,11 @@ class PetGame(commands.Cog):
 
     @commands.command(name="pet")
     async def show_pet(self, ctx):
-        """ペットの状態と操作ボタンを表示"""
+        # 指定チャンネルのみ許可（必要なければ削除してください）
+        if ctx.channel.id != PET_CHANNEL_ID:
+            await ctx.send(f"このコマンドは指定チャンネルでのみ使用可能です。")
+            return
+
         view = PetView(self.bot, ctx.author)
         pet = view.load_pet()
         embed = discord.Embed(
