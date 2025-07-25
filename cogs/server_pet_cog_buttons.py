@@ -169,5 +169,6 @@ class PetGame(commands.Cog):
         )
         await ctx.send(embed=embed, view=view)
 
-def setup(bot):
-    bot.add_cog(PetGame(bot))
+async def setup(bot):
+    await bot.add_cog(ペットゲーム(bot))
+
