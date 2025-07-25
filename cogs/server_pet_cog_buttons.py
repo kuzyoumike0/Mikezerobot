@@ -16,7 +16,7 @@ FOOD_VALUES = {
 }
 
 # 初期性格
-INITIAL_PERSONALITY = "まるまる"
+INITIAL_PERSONALITY = "ふわふわ"  # まるまるは画像がないので初期性格をふわふわに変更しました
 
 def load_pet_data():
     if os.path.exists(PET_DATA_PATH):
@@ -30,10 +30,19 @@ def save_pet_data(data):
         json.dump(data, f, ensure_ascii=False, indent=2)
 
 def get_image_path(personality, mood):
-    base_personality = personality
-    if personality == "まるまる":
-        base_personality = "neutral"  # 仮に neutral を割り当てても存在しない可能性があるので注意
-    filename = f"pet_{base_personality}_{mood}.png"
+    # moodは "happy", "neutral", "angry" の3種類を想定
+    # personalityは "キラキラ", "カチカチ", "もちもち", "ふわふわ" のいずれか
+    mood_key = mood.lower()
+    # personalityは日本語を英語化してファイル名に合わせる
+    personality_map = {
+        "キラキラ": "kirakira",
+        "カチカチ": "kachikachi",
+        "もちもち": "mochimochi",
+        "ふわふわ": "fuwafuwa"
+    }
+    personality_key = personality_map.get(personality, "fuwafuwa")
+
+    filename = f"pet_{personality_key}_{mood_key}.png"
     return os.path.join(PET_IMAGES_PATH, filename)
 
 class PetActionView(View):
