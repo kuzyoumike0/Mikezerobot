@@ -9,6 +9,10 @@ from config import FEED_TITLE_ROLES, PET_COMMAND_CHANNEL_ID, ROLE_TITLE_10, ROLE
 
 PET_DATA_PATH = "data/pets.json"
 
+# あなたのGitHub raw URLに合わせて変更
+GITHUB_RAW_BASE_URL = "https://raw.githubusercontent.com/<username>/<repo>/<branch>/images/"
+PET_IMAGE_URL = GITHUB_RAW_BASE_URL + "pet_fuwafuwa_neutral.png"
+
 FOOD_VALUES = {
     "キラキラ": ("kirakira", 10, "🍬"),
     "カチカチ": ("kachikachi", 10, "🧊"),
@@ -164,6 +168,7 @@ class PetGame(commands.Cog):
             ),
             color=discord.Color.pink()
         )
+        embed.set_image(url=PET_IMAGE_URL)
         await ctx.send(embed=embed, view=view)
 
 async def setup(bot):
