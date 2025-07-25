@@ -16,12 +16,13 @@ class CreateGroupView(View):
         self.participants = set()
         self.message = message
 
-        # persistent=True を付けて明示的にボタンを作成し、callbackを登録する
-        join_button = Button(label="参加", style=discord.ButtonStyle.primary, persistent=True)
+        # persistent は discord.py 2.3.0 以降でサポートされています
+        # バージョンによってはエラーになるため削除しました
+        join_button = Button(label="参加", style=discord.ButtonStyle.primary)
         join_button.callback = self.join_callback
         self.add_item(join_button)
 
-        create_button = Button(label="作成", style=discord.ButtonStyle.success, persistent=True)
+        create_button = Button(label="作成", style=discord.ButtonStyle.success)
         create_button.callback = self.create_callback
         self.add_item(create_button)
 
