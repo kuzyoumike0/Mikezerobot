@@ -5,7 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 
-from config import PET_COMMAND_CHANNEL_ID, ROLE_TITLE_10, ROLE_TITLE_30, ROLE_TITLE_50
+from config import FEED_TITLE_ROLES
 
 PET_DATA_PATH = "data/pets.json"
 
