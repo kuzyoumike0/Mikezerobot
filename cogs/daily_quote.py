@@ -21,7 +21,8 @@ class DailyQuote(commands.Cog):
             channel = self.bot.get_channel(DAILY_POST_CHANNEL_ID)
             if channel is None:
                 return
-            day_of_week = now.strftime("%a")  # Mon, Tue...
+
+            day_of_week = now.strftime("%a")  # Mon, Tue, ...
             weekday_map = {
                 "Mon": "月",
                 "Tue": "火",
@@ -78,7 +79,7 @@ class DailyQuote(commands.Cog):
                 }
             }
 
-            # petの性格は仮で"ふわふわ"固定
+            # TODO: 将来的にユーザー設定で取得可能にする
             personality = "ふわふわ"
             msgs = quotes.get(day_jp, {}).get(personality, ["今日もがんばろう！"])
 
@@ -88,5 +89,5 @@ class DailyQuote(commands.Cog):
     async def before_daily_task(self):
         await self.bot.wait_until_ready()
 
-def setup(bot):
-    bot.add_cog(DailyQuote(bot))
+async def setup(bot):
+    await bot.add_cog(DailyQuote(bot))
