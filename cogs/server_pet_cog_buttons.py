@@ -1,187 +1,137 @@
 import discord
-from discord.ext import commands, tasks
-import random
+from discord.ext import commands
+from discord.ui import View, Button
+import json
+import os
 from datetime import datetime, timedelta
-import pytz
 
-class Pet:
-    def __init__(self, name="ミルクシュガー"):
-        self.name = name
-        self.experience = 0
-        self.mood = 50
-        self.appearance = "ふわふわ"
-        self.food_counts = {"きらきら": 0, "カチカチ": 0, "もちもち": 0, "ふわふわ": 0}
+PET_DATA_PATH = "data/pets.json"
+FOOD_VALUES = {
+    "キラキラ": ("kirakira", 10, "🍬"),
+    "カチカチ": ("kachikachi", 10, "🧊"),
+    "もちもち": ("mochimochi", 10, "🍡"),
+    "ふわふわ": ("fuwafuwa", 10, "☁️")
+}
 
-    def feed(self, food_type):
-        self.food_counts[food_type] += 1
-        self.experience += 10
-        if self.experience > 100:
-            self.experience = 100
-        self.update_mood(5)
-        if self.experience == 100:
-            self.evolve()
+def is_on_cooldown(last_time_str):
+    if not last_time_str:
+        return False, 0
+    last_time = datetime.fromisoformat(last_time_str)
+    now = datetime.utcnow()
+    elapsed = now - last_time
+    if elapsed < timedelta(hours=1):
+        remaining = timedelta(hours=1) - elapsed
+        return True, int(remaining.total_seconds() // 60)
+    return False, 0
 
-    def evolve(self):
-        max_food = max(self.food_counts, key=self.food_counts.get)
-        self.appearance = max_food
-        self.experience = 0
-        self.food_counts = {key: 0 for key in self.food_counts}
+class PetView(View):
+    def __init__(self, bot, author: discord.Member):
+        super().__init__(timeout=None)
+        self.bot = bot
+        self.author = author
 
-    def update_mood(self, amount):
-        self.mood = max(0, min(100, self.mood + amount))
+        # 餌ボタンを追加
+        for name, (key, exp, emoji) in FOOD_VALUES.items():
+            self.add_item(self.FeedButton(label=name, style=discord.ButtonStyle.primary, emoji=emoji, key=key, exp=exp))
 
-    def walk(self):
-        self.update_mood(15)
+        # 撫でる・散歩ボタン
+        self.add_item(self.PetButton(style=discord.ButtonStyle.secondary, emoji="🤗"))
+        self.add_item(self.WalkButton(style=discord.ButtonStyle.success, emoji="🐾"))
 
-    def petting(self):
-        self.update_mood(10)
+    def load_pet(self):
+        if not os.path.exists(PET_DATA_PATH):
+            return {
+                "personality": "ふわふわ",
+                "mood": 50,
+                "exp": {"kirakira": 0, "kachikachi": 0, "mochimochi": 0, "fuwafuwa": 0},
+                "last_feed": {}, "last_pet": {}, "last_walk": {}
+            }
+        with open(PET_DATA_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
 
-    def mood_status(self):
-        if self.mood <= 30:
-            return "悪い"
-        elif self.mood <= 70:
-            return "普通"
-        else:
-            return "元気"
+    def save_pet(self, pet):
+        with open(PET_DATA_PATH, "w", encoding="utf-8") as f:
+            json.dump(pet, f, ensure_ascii=False, indent=2)
 
-    def get_image_url(self):
-        base_url = "https://raw.githubusercontent.com/yourusername/yourrepo/main/images/"
-        mapping = {
-            ("きらきら", "元気"): "kirakira_genki.png",
-            ("きらきら", "普通"): "kirakira_futuu.png",
-            ("きらきら", "悪い"): "kirakira_warui.png",
-            ("カチカチ", "元気"): "kachikachi_genki.png",
-            ("カチカチ", "普通"): "kachikachi_futuu.png",
-            ("カチカチ", "悪い"): "kachikachi_warui.png",
-            ("もちもち", "元気"): "mochimochi_genki.png",
-            ("もちもち", "普通"): "mochimochi_futuu.png",
-            ("もちもち", "悪い"): "mochimochi_warui.png",
-            ("ふわふわ", "元気"): "fuwafuwa_genki.png",
-            ("ふわふわ", "普通"): "fuwafuwa_futuu.png",
-            ("ふわふわ", "悪い"): "fuwafuwa_warui.png",
-        }
-        filename = mapping.get((self.appearance, self.mood_status()), "default.png")
-        return base_url + filename
+    class FeedButton(Button):
+        def __init__(self, label, style, emoji, key, exp):
+            super().__init__(label=label, style=style, emoji=emoji)
+            self.key = key
+            self.exp = exp
 
+        async def callback(self, interaction: discord.Interaction):
+            view: PetView = self.view
+            user_id = str(interaction.user.id)
+            pet = view.load_pet()
+            pet.setdefault("last_feed", {})
+            cooldown, mins = is_on_cooldown(pet["last_feed"].get(user_id))
+            if cooldown:
+                await interaction.response.send_message(f"⏳ {self.label}はあと{mins}分後にあげられます。", ephemeral=True)
+                return
 
-class ServerPetCogButtons(commands.Cog):
+            pet["exp"][self.key] += self.exp
+            pet["last_feed"][user_id] = datetime.utcnow().isoformat()
+            pet["mood"] = min(100, pet.get("mood", 50) + 5)  # 餌でちょっと機嫌UP
+            view.save_pet(pet)
+            await interaction.response.send_message(f"{self.emoji} {self.label}をあげました！", ephemeral=True)
+
+    class PetButton(Button):
+        def __init__(self, style, emoji):
+            super().__init__(label="撫でる", style=style, emoji=emoji)
+
+        async def callback(self, interaction: discord.Interaction):
+            view: PetView = self.view
+            user_id = str(interaction.user.id)
+            pet = view.load_pet()
+            pet.setdefault("last_pet", {})
+            cooldown, mins = is_on_cooldown(pet["last_pet"].get(user_id))
+            if cooldown:
+                await interaction.response.send_message(f"⏳ 撫でるのはあと{mins}分後にできます。", ephemeral=True)
+                return
+
+            pet["mood"] = min(100, pet.get("mood", 50) + 10)
+            pet["last_pet"][user_id] = datetime.utcnow().isoformat()
+            view.save_pet(pet)
+            await interaction.response.send_message("🤗 撫でてあげました！ミルクシュガーは嬉しそうです！", ephemeral=True)
+
+    class WalkButton(Button):
+        def __init__(self, style, emoji):
+            super().__init__(label="散歩", style=style, emoji=emoji)
+
+        async def callback(self, interaction: discord.Interaction):
+            view: PetView = self.view
+            user_id = str(interaction.user.id)
+            pet = view.load_pet()
+            pet.setdefault("last_walk", {})
+            cooldown, mins = is_on_cooldown(pet["last_walk"].get(user_id))
+            if cooldown:
+                await interaction.response.send_message(f"⏳ 散歩はあと{mins}分後にできます。", ephemeral=True)
+                return
+
+            pet["mood"] = min(100, pet.get("mood", 50) + 20)
+            pet["last_walk"][user_id] = datetime.utcnow().isoformat()
+            view.save_pet(pet)
+            await interaction.response.send_message("🐾 散歩してきました！機嫌が上がりました！", ephemeral=True)
+
+class PetGame(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.shared_pet = Pet()
-        self.user_timestamps = {}
-        self.comment_channels = {}
-        self.sent_today = set()
-        self.comment_loop.start()
 
-    def cog_unload(self):
-        self.comment_loop.cancel()
-
-    def can_perform_action(self, user_id, action):
-        now = datetime.utcnow()
-        if user_id not in self.user_timestamps:
-            self.user_timestamps[user_id] = {}
-        last_time = self.user_timestamps[user_id].get(action)
-        if last_time is None or now - last_time >= timedelta(hours=1):
-            self.user_timestamps[user_id][action] = now
-            return True
-        return False
-
-    @commands.command()
-    async def pet(self, ctx):
-        pet = self.shared_pet
-        mood = pet.mood_status()
-        appearance = pet.appearance
-        exp = pet.experience
-        image_url = pet.get_image_url()
-
-        embed = discord.Embed(title=f"{pet.name} の状態", color=0x00ffcc)
-        embed.add_field(name="機嫌", value=mood)
-        embed.add_field(name="外見", value=appearance)
-        embed.add_field(name="経験値", value=f"{exp}/100")
-        embed.set_image(url=image_url)
-
-        class PetView(discord.ui.View):
-            def __init__(self, author_id):
-                super().__init__(timeout=120)
-                self.author_id = author_id
-
-            async def interaction_check(self, interaction):
-                if interaction.user.id != self.author_id:
-                    await interaction.response.send_message("これはあなたの操作パネルです。", ephemeral=True)
-                    return False
-                return True
-
-            @discord.ui.button(label="餌をあげる", style=discord.ButtonStyle.green)
-            async def feed_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if not pet_cog.can_perform_action(interaction.user.id, "feed"):
-                    await interaction.response.send_message("餌は1時間に1回しかあげられません。", ephemeral=True)
-                    return
-                food = random.choice(["きらきら", "カチカチ", "もちもち", "ふわふわ"])
-                pet.feed(food)
-                await interaction.response.send_message(f"{food} の餌をあげました！", ephemeral=True)
-                await self.update_pet_message(interaction)
-
-            @discord.ui.button(label="散歩に行く", style=discord.ButtonStyle.primary)
-            async def walk_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if not pet_cog.can_perform_action(interaction.user.id, "walk"):
-                    await interaction.response.send_message("散歩は1時間に1回しかできません。", ephemeral=True)
-                    return
-                pet.walk()
-                await interaction.response.send_message("ペットと散歩しました！機嫌が少し上がりました。", ephemeral=True)
-                await self.update_pet_message(interaction)
-
-            @discord.ui.button(label="撫でる", style=discord.ButtonStyle.secondary)
-            async def pet_button(self, interaction: discord.Interaction, button: discord.ui.Button):
-                if not pet_cog.can_perform_action(interaction.user.id, "pet"):
-                    await interaction.response.send_message("撫でるのは1時間に1回までです。", ephemeral=True)
-                    return
-                pet.petting()
-                await interaction.response.send_message("ペットを撫でました！嬉しそうです。", ephemeral=True)
-                await self.update_pet_message(interaction)
-
-            async def update_pet_message(self, interaction):
-                mood = pet.mood_status()
-                appearance = pet.appearance
-                exp = pet.experience
-                image_url = pet.get_image_url()
-
-                embed = discord.Embed(title=f"{pet.name} の状態", color=0x00ffcc)
-                embed.add_field(name="機嫌", value=mood)
-                embed.add_field(name="外見", value=appearance)
-                embed.add_field(name="経験値", value=f"{exp}/100")
-                embed.set_image(url=image_url)
-
-                await interaction.message.edit(embed=embed, view=self)
-
-        pet_cog = self
-        view = PetView(ctx.author.id)
+    @commands.command(name="pet")
+    async def show_pet(self, ctx):
+        """ペットの状態と操作ボタンを表示"""
+        view = PetView(self.bot, ctx.author)
+        pet = view.load_pet()
+        embed = discord.Embed(
+            title="🐶 ミルクシュガーの育成",
+            description=(
+                f"性格: **{pet.get('personality', 'ふわふわ')}**\n"
+                f"機嫌: {pet.get('mood', 50)}/100\n"
+                f"経験値: {sum(pet.get('exp', {}).values())}"
+            ),
+            color=discord.Color.pink()
+        )
         await ctx.send(embed=embed, view=view)
 
-    @commands.command()
-    @commands.has_permissions(administrator=True)
-    async def setcommentchannel(self, ctx, channel: discord.TextChannel):
-        self.comment_channels[ctx.guild.id] = channel.id
-        await ctx.send(f"✅ 一言コメント送信先チャンネルを {channel.mention} に設定しました。")
-
-    @commands.command()
-    async def help_pet(self, ctx):
-        embed = discord.Embed(title="🐾 ペット育成コマンド一覧", color=0xffcccc)
-        embed.add_field(name="!pet", value="ペットの状態確認・操作（餌・散歩・撫でる）ボタンが出ます。", inline=False)
-        embed.add_field(name="!setcommentchannel #チャンネル", value="管理者のみ：コメント送信先チャンネルを設定します。", inline=False)
-        embed.add_field(name="餌をあげる", value="餌をあげると経験値が10増加します（最大100）。100になると進化します。", inline=False)
-        embed.add_field(name="散歩に行く", value="ペットと散歩して機嫌が15上昇。1時間に1回まで。", inline=False)
-        embed.add_field(name="撫でる", value="ペットを撫でて機嫌が10上昇。1時間に1回まで。", inline=False)
-        embed.set_footer(text="🌸 ペットの機嫌は「元気」「普通」「悪い」の3段階。全員で育てましょう！")
-        await ctx.send(embed=embed)
-
-    @tasks.loop(minutes=1)
-    async def comment_loop(self):
-        JST = pytz.timezone('Asia/Tokyo')
-        now = datetime.now(JST)
-
-        # 毎朝10時に一言コメント送信
-        if now.hour == 10 and now.minute == 0:
-            for guild in self.bot.guilds:
-                channel_id = self.comment_channels.get(guild.id)
-                if not channel_id:
-                   
+def setup(bot):
+    bot.add_cog(PetGame(bot))
