@@ -13,12 +13,21 @@ class Recorder(commands.Cog):
     async def joinrec(self, ctx):
         """ボイスチャットに参加"""
         try:
-            if ctx.author.voice:
-                channel = ctx.author.voice.channel
-                await self.rec.join(channel)
+            if not ctx.author.voice:
+                await ctx.send("❌ あなたはボイスチャンネルに参加していません。")
+                return
+
+            if ctx.voice_client:
+                await ctx.send("⚠️ Botはすでにボイスチャンネルに接続しています。")
+                return
+
+            channel = ctx.author.voice.channel
+            await self.rec.join(channel)
+
+            if ctx.voice_client and ctx.voice_client.is_connected():
                 await ctx.send("🎧 ボイスチャンネルに参加しました。")
             else:
-                await ctx.send("❌ あなたはボイスチャンネルに参加していません。")
+                await ctx.send("❌ ボイスチャンネルへの接続に失敗しました。")
         except Exception as e:
             await ctx.send(f"⚠ エラーが発生しました: ```\n{e}\n```")
 
