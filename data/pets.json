@@ -1,1 +1,8 @@
-{}
+{
+  "personality": "ふわふわ",
+  "mood": 60,
+  "exp": {
+    "feed": 10,
+    "walk": 5
+  }
+}
