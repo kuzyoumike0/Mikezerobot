@@ -51,7 +51,7 @@ class PetView(View):
 
     def load_pet(self):
         try:
-            with open("data/pets.json", "r", encoding="utf-8") as f:
+            with open("data/pet.json", "r", encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             return {
