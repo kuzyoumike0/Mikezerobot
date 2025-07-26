@@ -7,64 +7,53 @@ TOKEN = os.getenv("TOKEN")
 # ギルド（サーバー）ID
 GUILD_ID = 1384327412946309160
 
-# 各種チャンネルID
+# ===== チャンネルID =====
 EXIT_CONFIRM_CHANNEL_ID = 1392965873261609110
 BUMP_CHANNEL_ID = 1389328686192263238
+PET_COMMAND_CHANNEL_ID = 1397723707606171759  # !pet コマンド用
+PET_HELP_CHANNEL_ID = 1397793018744012880
+PET_RANKING_CHANNEL_ID = 1397794425060589692
+DAILY_POST_CHANNEL_ID = 1398250949239242752  # ペットの一言投稿用
+ANON_CHANNEL_ID = 1397965805744029706
+MYSTERY_CHANNEL_ID = 1397863394064994395
+MYSTERY_SET_CHANNEL_ID = 1397867367882821793
 
-# カテゴリID（テキストチャンネル作成先など）
+# ===== カテゴリID =====
 CATEGORY_ID = 1396282762004135956
 SECRET_CATEGORY_ID = 1397686948130459655
+VC_CATEGORY_ID = SECRET_CATEGORY_ID  # VC用カテゴリ
 
-# VCコマンド許可テキストチャンネルID
-ALLOWED_TEXT_CHANNEL_ID = 1393103534311997541
-
-# VCチャンネルID（複数VC対応）
+# ===== VC関連 =====
+ALLOWED_TEXT_CHANNEL_ID = 1393103534311997541  # VCコマンド許可テキストチャンネル
 VC_CHANNEL_IDS = {
     "セッション１": 1386201663446057102,
     "セッション２": 1397684964430184701,
     "セッション３": 1397685082369818881
 }
 
-# ペット関連のチャンネルID
-PET_COMMAND_CHANNEL_ID = 1397723707606171759  # !petコマンドを打てるチャンネルID
-PET_HELP_CHANNEL_ID = 1397793018744012880
-PET_RANKING_CHANNEL_ID = 1397794425060589692
-
-# ペットの一言を投稿するチャンネルID
-DAILY_POST_CHANNEL_ID = 1398250949239242752
-
-# ペット育成ロール対応（経験値ごとのロールID）
+# ===== ペット育成ロール（称号） =====
 FEED_TITLE_ROLES = {
     10: 1397793352396574720,  # 見習い餌やり師😺
     30: 1397793748926201886,  # 一人前の餌やり師😸
     50: 1397794033236971601,  # 伝説の餌やり師😻
 }
 
-# 経験値に応じて付与するロールID（PetView用）
+# 経験値に応じて付与するロール（PetView用）
 ROLE_TITLE_10 = 1397793352396574720
 ROLE_TITLE_30 = 1397793748926201886
 ROLE_TITLE_50 = 1397794033236971601
 
-# 匿名相談チャンネルID
-ANON_CHANNEL_ID = 1397965805744029706
+# ===== 権限・ロール関連 =====
+SPECIAL_ROLE_ID = 1396919553413353503  # 特定ロール（密談などに参加）
+MOD_ROLE_ID = 1385323031047438437  # 管理者・モデレーター
 
-# VCカテゴリID（テキストチャンネル作成先）
-VC_CATEGORY_ID = SECRET_CATEGORY_ID
+# ===== creategroupコマンド許可チャンネル =====
+CREATEGROUP_ALLOWED_CHANNELS = [
+    1385323336699219979,
+    1386584590289866814
+]
 
-# 特定のロールID
-SPECIAL_ROLE_ID = 1396919553413353503
-
-# 管理者・モデレーターのロールID
-MOD_ROLE_ID = 1385323031047438437
-
-# creategroupコマンドを許可するチャンネルID
-CREATEGROUP_ALLOWED_CHANNELS = [1385323336699219979, 1386584590289866814]
-
-# 謎解きチャンネルID
-MYSTERY_CHANNEL_ID = 1397863394064994395
-MYSTERY_SET_CHANNEL_ID = 1397867367882821793
-
-# 時間帯ごとの音声ファイル名設定
+# ===== VC入退室サウンド関連 =====
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",
     "afternoon": "join_afternoon.mp3",
@@ -79,7 +68,6 @@ LEAVE_SOUNDS = {
     "night": "leave_night.mp3",
 }
 
-# 時間帯の範囲（時刻は24時間制、開始時刻と終了時刻）
 TIME_RANGES = {
     "morning": (5, 12),
     "afternoon": (12, 17),
@@ -87,8 +75,9 @@ TIME_RANGES = {
     "night": (22, 5),
 }
 
-# データディレクトリとファイルパス（永続ビューなど）
+# ===== 永続データ保存先 =====
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
 os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリがなければ作成
+
 PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "persistent_views.json")
