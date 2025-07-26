@@ -24,8 +24,8 @@ class Recorder(commands.Cog):
         else:
             await ctx.send("⚠️ ボイスチャンネルに参加していません")
 
-    @commands.command()
-    async def leave(self, ctx):
+    @commands.command(name="recstop")
+    async def recstop(self, ctx):
         """ボイスチャンネルから退出"""
         vc = self.voice_clients.get(ctx.guild.id)
         if vc:
