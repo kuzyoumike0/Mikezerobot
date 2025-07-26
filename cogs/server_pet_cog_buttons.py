@@ -20,7 +20,7 @@ class PetGame(commands.Cog):
             return
 
         #mimic test        
-        #try:
+        try:
             # Embed + View送信
             view = PetView(self.bot, ctx.author)
             pet = view.load_pet()
@@ -35,9 +35,9 @@ class PetGame(commands.Cog):
             await ctx.send(embed=embed, view=view)
 
         #mimic test
-        #except Exception as e:
-            ## 発生した例外のメッセージをDiscordに送信
-            #await ctx.send(f"エラーが発生しました: {e}")
+        except Exception as e:
+            # 発生した例外のメッセージをDiscordに送信
+            await ctx.send(f"エラーが発生しました: {e}")
 
 #mimic test
 class PetView(View):
