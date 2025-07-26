@@ -51,7 +51,7 @@ class PetView(View):
 
     def load_pet(self):
         try:
-            with open("data/pet.json", "r", encoding="utf-8") as f:
+            with open("data/pets.json", "r", encoding="utf-8") as f:
                 return json.load(f)
         except FileNotFoundError:
             return {
@@ -61,7 +61,7 @@ class PetView(View):
             }
 
     def save_pet(self, pet_data):
-        with open("data/shared_pet.json", "w", encoding="utf-8") as f:
+        with open("data/pets.json", "w", encoding="utf-8") as f:
             json.dump(pet_data, f, ensure_ascii=False, indent=2)
 
 # mimic test
