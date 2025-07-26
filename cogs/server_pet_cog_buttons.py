@@ -5,10 +5,12 @@ import json
 import os
 import datetime
 
+# データパス
 PET_DATA_PATH = "data/pets.json"
 PET_IMAGES_PATH = "images"
 TIMESTAMP_PATH = "data/interaction_timestamps.json"
 
+# 餌の種類と性格
 FOOD_VALUES = {
     "キラキラ": ("kirakira", 10),
     "カチカチ": ("kachikachi", 10),
@@ -27,6 +29,28 @@ def load_json(path, default={}):
 def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+def get_pet_image(personality: str, mood: str) -> str:
+    filename = f"pet_{personality}_{mood}.png"
+    return os.path.join(PET_IMAGES_PATH, filename)
+
+def get_pet_data():
+    return load_json(PET_DATA_PATH, default={
+        "personality": "marumaru",
+        "mood": 100,
+        "experience": {
+            "kirakira": 0,
+            "kachikachi": 0,
+            "mochimochi": 0,
+            "fuwafuwa": 0
+        }
+    })
+
+def save_pet_data(data):
+    save_json(PET_DATA_PATH, data)
+
+def get_mood_status(mood: int) -> str:
+    return "happy" if mood >= 50 else "angry"
 
 class PetButtonView(View):
     def __init__(self, bot, user_id):
@@ -61,14 +85,12 @@ class PetActionButton(Button):
                 await interaction.response.send_message(f"{self.label}は1時間に1回だけ使えます。", ephemeral=True)
                 return
 
-        # 更新
         user_times[self.action] = now.isoformat()
         timestamps[user_id] = user_times
         save_json(TIMESTAMP_PATH, timestamps)
 
         await interaction.response.send_message(f"{self.label} を実行しました！", ephemeral=True)
 
-        # 各アクションに応じた処理を入れる（以下は簡易例）
         if self.action == "feed":
             await self.handle_feed(interaction)
         elif self.action == "walk":
@@ -77,16 +99,26 @@ class PetActionButton(Button):
             await self.handle_pet(interaction)
 
     async def handle_feed(self, interaction):
-        # ここに餌やり処理を記述（省略可能）
-        pass
+        pet_data = get_pet_data()
+        key, exp = FOOD_VALUES[self.label]
+        pet_data["experience"][key] += exp
+
+        if pet_data["experience"][key] >= 100:
+            pet_data["personality"] = key
+            for k in pet_data["experience"]:
+                pet_data["experience"][k] = 0
+
+        save_pet_data(pet_data)
 
     async def handle_walk(self, interaction):
-        # ここに散歩処理を記述（省略可能）
-        pass
+        pet_data = get_pet_data()
+        pet_data["mood"] = min(pet_data["mood"] + 10, 100)
+        save_pet_data(pet_data)
 
     async def handle_pet(self, interaction):
-        # ここに撫でる処理を記述（省略可能）
-        pass
+        pet_data = get_pet_data()
+        pet_data["mood"] = min(pet_data["mood"] + 5, 100)
+        save_pet_data(pet_data)
 
 class ペットゲーム(commands.Cog):
     def __init__(self, bot):
@@ -94,8 +126,23 @@ class ペットゲーム(commands.Cog):
 
     @commands.command(name="pet")
     async def show_pet(self, ctx):
+        pet_data = get_pet_data()
+        personality = pet_data.get("personality", "marumaru")
+        mood_value = pet_data.get("mood", 100)
+        mood_status = get_mood_status(mood_value)
+
+        image_path = get_pet_image(personality, mood_status)
+        file = discord.File(image_path, filename="pet.png")
+
+        embed = discord.Embed(
+            title="🐾 ミルクシュガーのお世話 🐾",
+            description=f"性格: **{personality}**\n機嫌: **{mood_value}** ({'良い' if mood_status == 'happy' else '悪い'})",
+            color=discord.Color.pink()
+        )
+        embed.set_image(url="attachment://pet.png")
+
         view = PetButtonView(bot=self.bot, user_id=ctx.author.id)
-        await ctx.send("ミルクシュガーのお世話メニューです", view=view)
+        await ctx.send(embed=embed, file=file, view=view)
 
 async def setup(bot):
     await bot.add_cog(ペットゲーム(bot))
