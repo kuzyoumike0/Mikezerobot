@@ -9,7 +9,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # ロギング設定
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
 logger = logging.getLogger("discord_bot")
 
 # TOKENの取得
@@ -53,7 +56,14 @@ async def on_ready():
 @bot.event
 async def on_command_error(ctx, error):
     logger.error(f"⚠️ コマンドエラー: {ctx.command} - {error}")
-    await ctx.send(f"❌ コマンド実行中にエラーが発生しました。\n```{error}```")
+    # コマンドのないエラーは無視するか別途処理
+    if ctx.command is None:
+        return
+    try:
+        await ctx.send(f"❌ コマンド実行中にエラーが発生しました。\n```{error}```")
+    except discord.HTTPException:
+        # メッセージ送信失敗時はログのみ
+        logger.error("⚠️ エラーメッセージの送信に失敗しました。")
 
 # --- メイン起動関数 ---
 async def main():
