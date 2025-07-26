@@ -1,154 +1,111 @@
 import discord
 from discord.ext import commands
 import asyncio
-import subprocess
-import sys
 import os
-import datetime
-import re
+import sounddevice as sd
+import wave
+import threading
+import platform
+import subprocess
+from datetime import datetime
+
+RECORDINGS_DIR = "recordings"
 
 class Recorder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.voice_clients = {}
-        self.record_process = None
+        self.voice_client = None
+        self.is_recording = False
+        self.recording_thread = None
+        self.audio_filename = None
+        self.stop_event = threading.Event()
 
-    def detect_windows_audio_device(self):
-        """Windows用：利用可能な録音デバイス一覧を取得し、AG03優先で返す"""
+        # 録音デバイス名を初期化
+        self.input_device_name = self.detect_input_device()
+
+    def detect_input_device(self):
+        os_type = platform.system()
+        devices = sd.query_devices()
+        if os_type == "Linux":
+            # Linuxでモニターソースを優先検出
+            for dev in devices:
+                if "monitor" in dev['name'].lower():
+                    return dev['name']
+        elif os_type == "Windows":
+            for dev in devices:
+                if "loopback" in dev['name'].lower() or "stereo mix" in dev['name'].lower() or "audio-capturer" in dev['name'].lower():
+                    return dev['name']
+        # fallback: デフォルトデバイス
+        return sd.query_devices(kind='input')['name']
+
+    def record_audio(self, filename):
+        samplerate = 44100
+        channels = 2
         try:
-            result = subprocess.run(
-                ["ffmpeg", "-list_devices", "true", "-f", "dshow", "-i", "dummy"],
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            output = result.stderr  # デバイスリストはstderrに出る
-            devices = []
-            audio_device_pattern = re.compile(r'\[dshow @ .*\] *"([^"]+)" *\(audio\)')
-            for line in output.splitlines():
-                match = audio_device_pattern.search(line)
-                if match:
-                    devices.append(match.group(1))
-            devices_lower = [d.lower() for d in devices]
-
-            for dev in devices:
-                if "ag03" in dev.lower():
-                    return f'audio={dev}'
-
-            for dev in devices:
-                if "virtual-audio-capturer" in dev.lower():
-                    return f'audio={dev}'
-
-            for dev in devices:
-                if "ステレオミキサー" in dev or "stereo mix" in dev.lower():
-                    return f'audio={dev}'
-
-            if devices:
-                return f'audio={devices[0]}'
-
-            return None
+            device_info = sd.query_devices(self.input_device_name, kind='input')
+            samplerate = int(device_info['default_samplerate'])
         except Exception as e:
-            print(f"[ERROR] Windows audio device detection failed: {e}")
-            return None
+            print(f"デバイス情報取得エラー: {e}")
 
-    @commands.command()
+        try:
+            with sf.SoundFile(filename, mode='x', samplerate=samplerate, channels=channels, subtype='PCM_16') as file:
+                with sd.InputStream(samplerate=samplerate, device=self.input_device_name,
+                                    channels=channels, callback=lambda indata, frames, time, status: file.write(indata)):
+                    print(f"[録音開始] デバイス: {self.input_device_name}")
+                    self.stop_event.clear()
+                    while not self.stop_event.is_set():
+                        sd.sleep(100)
+        except Exception as e:
+            print(f"[録音エラー] {e}")
+
+    @commands.command(name="joinrec")
     async def joinrec(self, ctx):
-        """ボイスチャンネルに参加して録音準備"""
-        if ctx.author.voice:
-            channel = ctx.author.voice.channel
-            if ctx.voice_client is not None:
-                await ctx.send("⚠️ すでにボイスチャンネルに接続しています。")
-                return
-            vc = await channel.connect()
-            self.voice_clients[ctx.guild.id] = vc
-            await ctx.send("✅ ボイスチャンネルに参加しました。録音準備完了。")
-        else:
-            await ctx.send("⚠️ あなたはボイスチャンネルに参加していません。")
+        if not ctx.author.voice:
+            await ctx.send("❌ ボイスチャンネルに接続してから実行してください。")
+            return
 
-    @commands.command()
+        channel = ctx.author.voice.channel
+        if ctx.voice_client:
+            self.voice_client = ctx.voice_client
+        else:
+            self.voice_client = await channel.connect()
+
+        if not os.path.exists(RECORDINGS_DIR):
+            os.makedirs(RECORDINGS_DIR)
+
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.audio_filename = os.path.join(RECORDINGS_DIR, f"recording_{timestamp}.wav")
+        self.is_recording = True
+        self.recording_thread = threading.Thread(target=self.record_audio, args=(self.audio_filename,))
+        self.recording_thread.start()
+
+        await ctx.send(f"🔴 録音を開始しました。\n🎙 デバイス: `{self.input_device_name}`")
+
+    @commands.command(name="stoprec")
     async def stoprec(self, ctx):
-        """録音停止しファイルを保存して送信"""
-        if ctx.guild.id not in self.voice_clients:
-            await ctx.send("⚠️ ボイスチャンネルに接続していません。")
+        if not self.is_recording:
+            await ctx.send("⚠️ 録音は行われていません。")
             return
 
-        if self.record_process is None:
-            await ctx.send("⚠️ 録音は開始されていません。")
-            return
+        self.stop_event.set()
+        self.recording_thread.join()
+        self.is_recording = False
 
-        self.record_process.terminate()
-        await asyncio.sleep(1)
-        self.record_process = None
+        if self.voice_client:
+            await self.voice_client.disconnect()
+            self.voice_client = None
 
-        filename = self.current_recording_file
-        if os.path.exists(filename):
-            await ctx.send(f"🛑 録音を停止しました。録音ファイルを送信します。", file=discord.File(filename))
-        else:
-            await ctx.send("❌ 録音ファイルが見つかりません。")
-
-    @commands.command()
-    async def record(self, ctx, duration: int = 60):
-        """録音開始（!record [秒数]）"""
-        if ctx.guild.id not in self.voice_clients:
-            await ctx.send("⚠️ ボイスチャンネルに接続していません。")
-            return
-
-        if self.record_process:
-            await ctx.send("⚠️ 録音はすでに開始されています。")
-            return
-
-        audio_device = None
-        if sys.platform == "win32":
-            audio_device = self.detect_windows_audio_device()
-            if audio_device is None:
-                await ctx.send("❌ Windowsの録音デバイスが見つかりませんでした。")
-                return
-        else:
-            await ctx.send("❌ 現状このBotはWindowsのみ対応です。")
-            return
-
-        filename = f"recordings/recording_{ctx.guild.id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.wav"
-        os.makedirs("recordings", exist_ok=True)
-
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-f", "dshow",
-            "-i", audio_device,
-            "-t", str(duration),
-            "-acodec", "pcm_s16le",
-            "-ar", "44100",
-            "-ac", "2",
-            filename,
-        ]
-
-        await ctx.send(f"🎙️ 録音開始（{duration}秒）... デバイス: {audio_device}")
-
-        self.record_process = await asyncio.create_subprocess_exec(*ffmpeg_cmd)
-        self.current_recording_file = filename
-
-    @commands.command()
-    async def leaverec(self, ctx):
-        """ボイスチャンネルから退出"""
-        vc = self.voice_clients.get(ctx.guild.id)
-        if vc:
-            if self.record_process:
-                self.record_process.terminate()
-                self.record_process = None
-            await vc.disconnect()
-            del self.voice_clients[ctx.guild.id]
-            await ctx.send("👋 ボイスチャンネルから退出しました。")
-        else:
-            await ctx.send("⚠️ ボイスチャンネルに接続していません。")
+        await ctx.send(f"🛑 録音を停止しました。\n💾 保存ファイル: `{self.audio_filename}`")
 
     @commands.command(name="helprec")
     async def helprec(self, ctx):
-        """録音関連コマンドの使い方を表示"""
-        embed = discord.Embed(title="🎙️ 録音Bot コマンド一覧", color=discord.Color.blue())
-        embed.add_field(name="!joinrec", value="ボイスチャンネルに参加して録音準備をします。", inline=False)
-        embed.add_field(name="!record [秒数]", value="録音を開始します。秒数は任意で指定（デフォルト60秒）。", inline=False)
-        embed.add_field(name="!stoprec", value="録音を停止し、録音ファイルを送信します。", inline=False)
-        embed.add_field(name="!leaverec", value="ボイスチャンネルから退出します。", inline=False)
+        embed = discord.Embed(title="🎙 Recorder Bot Help", color=discord.Color.green())
+        embed.add_field(name="!joinrec", value="VCに参加し録音を開始します。", inline=False)
+        embed.add_field(name="!stoprec", value="録音を停止し、ファイルを保存してVCから退出します。", inline=False)
+        embed.add_field(name="録音デバイス", value=f"自動検出されたデバイス: `{self.input_device_name}`", inline=False)
+        embed.set_footer(text="録音ファイルは recordings フォルダに保存されます。")
         await ctx.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(Recorder(bot))
