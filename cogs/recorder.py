@@ -1,6 +1,6 @@
 import discord
 from discord.ext import commands
-from discord.ext import audiorec
+from discord.ext import audiorec  # ※このライブラリは実在しない可能性があるので注意
 import os
 from datetime import datetime
 
@@ -46,14 +46,10 @@ class Recorder(commands.Cog):
         try:
             audio = await self.rec.stop_recording(ctx.guild)
 
-            # recordings フォルダがなければ作成
             os.makedirs("recordings", exist_ok=True)
-
-            # 現在の日付を取得（例：2025-07-26）
             date_str = datetime.now().strftime("%Y-%m-%d")
             file_path = f"recordings/recording_{date_str}.wav"
 
-            # バッファを先頭に戻してから保存
             audio.file.seek(0)
             with open(file_path, "wb") as f:
                 f.write(audio.file.read())
@@ -80,12 +76,12 @@ class Recorder(commands.Cog):
         help_text = (
             "**🎙 録音Bot コマンド一覧：**\n"
             "```yaml\n"
-            !joinrec   : ボイスチャンネルに参加\n"
-            !rec       : 録音を開始\n"
-            !recstop   : 録音を停止してファイルを送信\n"
-            !leave     : ボイスチャンネルから退出\n"
-            !helprec   : このコマンド一覧を表示\n"
-            ```"
+            "!joinrec   : ボイスチャンネルに参加\n"
+            "!rec       : 録音を開始\n"
+            "!recstop   : 録音を停止してファイルを送信\n"
+            "!leave     : ボイスチャンネルから退出\n"
+            "!helprec   : このコマンド一覧を表示\n"
+            "```"
         )
         await ctx.send(help_text)
 
