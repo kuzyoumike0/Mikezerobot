@@ -141,7 +141,6 @@ class CreateGroup(commands.Cog):
         print("[CreateGroup] Cog initialized.")
 
     async def cog_load(self):
-        # Bot起動後に永続ビューの読み込みを非同期開始
         asyncio.create_task(self.load_persistent_views())
         print("[CreateGroup] cog_load により persistent views をロード開始")
 
@@ -179,7 +178,7 @@ class CreateGroup(commands.Cog):
             "channel_id": ctx.channel.id,
             "message_id": message.id,
             "channel_name": view.channel_name,
-            "participants": []  # 新規作成時は空
+            "participants": []
         })
 
         os.makedirs(os.path.dirname(PERSISTENT_VIEWS_PATH), exist_ok=True)
@@ -226,4 +225,4 @@ class CreateGroup(commands.Cog):
 
 
 async def setup(bot):
-    await bot.add_cog(DailyQuote(bot))
+    await bot.add_cog(CreateGroup(bot))
