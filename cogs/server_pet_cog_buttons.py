@@ -41,7 +41,7 @@ class PetGame(commands.Cog):
 
 #mimic test
 class PetView(View):
-    PET_IMAGE_URL = "https://github.com/kuzyoumike0/Mikezerobot/blob/main/images/pet_fuwafuwa_happy.png"
+    PET_IMAGE_URL = "https://raw.githubusercontent.com/kuzyoumike0/Mikezerobot/main/images/pet_fuwafuwa_happy.png"
     #ペットイメージのURL指定
 
     def __init__(self, bot, user):
