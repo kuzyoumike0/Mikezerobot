@@ -1,16 +1,13 @@
 import discord
-from discord.ext import commands, tasks
+from discord.ext import commands
 from discord.ui import View, Button
 import json
 import os
 import datetime
 
-# データパス
 PET_DATA_PATH = "data/pets.json"
-PET_IMAGES_PATH = "images"
 TIMESTAMP_PATH = "data/interaction_timestamps.json"
 
-# 餌の種類と性格
 FOOD_VALUES = {
     "キラキラ": ("kirakira", 10),
     "カチカチ": ("kachikachi", 10),
@@ -30,27 +27,25 @@ def save_json(path, data):
     with open(path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
-def get_pet_image(personality: str, mood: str) -> str:
-    filename = f"pet_{personality}_{mood}.png"
-    return os.path.join(PET_IMAGES_PATH, filename)
+def get_pet_image_path(personality: str, mood_score: int) -> str:
+    # moodスコアにより画像の表情を選択
+    if mood_score >= 70:
+        mood = "happy"
+    elif mood_score >= 40:
+        mood = "neutral"
+    else:
+        mood = "angry"
 
-def get_pet_data():
-    return load_json(PET_DATA_PATH, default={
-        "personality": "marumaru",
-        "mood": 100,
-        "experience": {
-            "kirakira": 0,
-            "kachikachi": 0,
-            "mochimochi": 0,
-            "fuwafuwa": 0
-        }
-    })
+    personality_map = {
+        "ふわふわ": "fuwafuwa",
+        "キラキラ": "kirakira",
+        "カチカチ": "kachikachi",
+        "もちもち": "mochimochi",
+    }
 
-def save_pet_data(data):
-    save_json(PET_DATA_PATH, data)
-
-def get_mood_status(mood: int) -> str:
-    return "happy" if mood >= 50 else "angry"
+    p = personality_map.get(personality, "fuwafuwa")
+    filename = f"images/pet_{p}_{mood}.png"
+    return filename
 
 class PetButtonView(View):
     def __init__(self, bot, user_id):
@@ -58,10 +53,13 @@ class PetButtonView(View):
         self.bot = bot
         self.user_id = str(user_id)
 
+        # 餌ボタンを追加
         for food in FOOD_VALUES:
             self.add_item(PetActionButton(label=food, action="feed", style=discord.ButtonStyle.primary, user_id=self.user_id, bot=bot))
 
+        # 散歩ボタン
         self.add_item(PetActionButton(label="散歩", action="walk", style=discord.ButtonStyle.success, user_id=self.user_id, bot=bot))
+        # 撫でるボタン
         self.add_item(PetActionButton(label="撫でる", action="pet", style=discord.ButtonStyle.secondary, user_id=self.user_id, bot=bot))
 
 class PetActionButton(Button):
@@ -76,49 +74,49 @@ class PetActionButton(Button):
         user_id = str(interaction.user.id)
         now = datetime.datetime.now()
 
+        # 利用履歴ロード
         timestamps = load_json(TIMESTAMP_PATH)
         user_times = timestamps.get(user_id, {})
         last_time_str = user_times.get(self.action)
+
         if last_time_str:
             last_time = datetime.datetime.fromisoformat(last_time_str)
             if now - last_time < datetime.timedelta(hours=1):
                 await interaction.response.send_message(f"{self.label}は1時間に1回だけ使えます。", ephemeral=True)
                 return
 
+        # タイムスタンプ更新
         user_times[self.action] = now.isoformat()
         timestamps[user_id] = user_times
         save_json(TIMESTAMP_PATH, timestamps)
 
-        await interaction.response.send_message(f"{self.label} を実行しました！", ephemeral=True)
+        # ペットデータ読み込み
+        pet = load_json(PET_DATA_PATH, default={
+            "personality": "ふわふわ",
+            "mood": 50,
+            "exp": {"キラキラ":0, "カチカチ":0, "もちもち":0, "ふわふわ":0, "walk":0, "pet":0}
+        })
 
+        # アクション別処理
         if self.action == "feed":
-            await self.handle_feed(interaction)
+            category = self.label
+            pet["exp"][category] = pet["exp"].get(category, 0) + 1
+            pet["mood"] = min(100, pet.get("mood", 50) + 3)
+            pet["personality"] = category
+            await interaction.response.send_message(f"🍚 {category}をあげました！", ephemeral=True)
+
         elif self.action == "walk":
-            await self.handle_walk(interaction)
+            pet["mood"] = max(0, pet.get("mood", 50) - 5)
+            pet["exp"]["walk"] = pet["exp"].get("walk", 0) + 1
+            await interaction.response.send_message("テクテク……いい天気だったね！☀️", ephemeral=True)
+
         elif self.action == "pet":
-            await self.handle_pet(interaction)
+            pet["mood"] = min(100, pet.get("mood", 50) + 5)
+            pet["exp"]["pet"] = pet["exp"].get("pet", 0) + 1
+            await interaction.response.send_message("なでなで……ミルクシュガーは嬉しそう！✨", ephemeral=True)
 
-    async def handle_feed(self, interaction):
-        pet_data = get_pet_data()
-        key, exp = FOOD_VALUES[self.label]
-        pet_data["experience"][key] += exp
-
-        if pet_data["experience"][key] >= 100:
-            pet_data["personality"] = key
-            for k in pet_data["experience"]:
-                pet_data["experience"][k] = 0
-
-        save_pet_data(pet_data)
-
-    async def handle_walk(self, interaction):
-        pet_data = get_pet_data()
-        pet_data["mood"] = min(pet_data["mood"] + 10, 100)
-        save_pet_data(pet_data)
-
-    async def handle_pet(self, interaction):
-        pet_data = get_pet_data()
-        pet_data["mood"] = min(pet_data["mood"] + 5, 100)
-        save_pet_data(pet_data)
+        # ペットデータ保存
+        save_json(PET_DATA_PATH, pet)
 
 class ペットゲーム(commands.Cog):
     def __init__(self, bot):
@@ -126,17 +124,26 @@ class ペットゲーム(commands.Cog):
 
     @commands.command(name="pet")
     async def show_pet(self, ctx):
-        pet_data = get_pet_data()
-        personality = pet_data.get("personality", "marumaru")
-        mood_value = pet_data.get("mood", 100)
-        mood_status = get_mood_status(mood_value)
+        pet = load_json(PET_DATA_PATH, default={
+            "personality": "ふわふわ",
+            "mood": 50,
+            "exp": {"キラキラ":0, "カチカチ":0, "もちもち":0, "ふわふわ":0, "walk":0, "pet":0}
+        })
 
-        image_path = get_pet_image(personality, mood_status)
+        personality = pet.get("personality", "ふわふわ")
+        mood = pet.get("mood", 50)
+
+        image_path = get_pet_image_path(personality, mood)
+
+        # 画像ファイルが存在しない場合の代替
+        if not os.path.exists(image_path):
+            image_path = "images/pet_fuwafuwa_neutral.png"
+
         file = discord.File(image_path, filename="pet.png")
 
         embed = discord.Embed(
-            title="🐾 ミルクシュガーのお世話 🐾",
-            description=f"性格: **{personality}**\n機嫌: **{mood_value}** ({'良い' if mood_status == 'happy' else '悪い'})",
+            title="🐶 ミルクシュガーの育成",
+            description=f"性格: {personality}\n機嫌: {mood}/100",
             color=discord.Color.pink()
         )
         embed.set_image(url="attachment://pet.png")
