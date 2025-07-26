@@ -22,18 +22,18 @@ class PetGame(commands.Cog):
         #mimic test        
         try:
             
-        # Embed + View送信
-        view = PetView(self.bot, ctx.author)
-        pet = view.load_pet()
-        total_exp = sum(pet.get("exp", {}).values())
-
-        embed = discord.Embed(
-            title="🐶 ミルクシュガーの育成",
-            description=f"性格: {pet.get('personality', 'ふわふわ')}\n機嫌: {pet.get('mood', 50)}/100\n経験値: {total_exp}",
-            color=discord.Color.pink()
-        )
-        embed.set_image(url=view.PET_IMAGE_URL)
-        await ctx.send(embed=embed, view=view)
+            # Embed + View送信
+            view = PetView(self.bot, ctx.author)
+            pet = view.load_pet()
+            total_exp = sum(pet.get("exp", {}).values())
+    
+            embed = discord.Embed(
+                title="🐶 ミルクシュガーの育成",
+                description=f"性格: {pet.get('personality', 'ふわふわ')}\n機嫌: {pet.get('mood', 50)}/100\n経験値: {total_exp}",
+                color=discord.Color.pink()
+            )
+            embed.set_image(url=view.PET_IMAGE_URL)
+            await ctx.send(embed=embed, view=view)
 
         #mimic test
         except Exception as e:
