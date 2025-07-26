@@ -15,6 +15,9 @@ class Recorder(commands.Cog):
         """ボイスチャンネルに参加"""
         if ctx.author.voice:
             channel = ctx.author.voice.channel
+            if ctx.guild.id in self.voice_clients:
+                await ctx.send("⚠️ すでにボイスチャンネルに接続しています。")
+                return
             vc = await channel.connect()
             self.voice_clients[ctx.guild.id] = vc
             await ctx.send("✅ ボイスチャンネルに参加しました")
@@ -43,27 +46,51 @@ class Recorder(commands.Cog):
             await ctx.send("⚠️ ボイスチャンネルに接続していません")
             return
 
-        # 録音ファイル名
-        filename = f"recordings/recording_{ctx.guild.id}_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.mp3"
+        # 録音用フォルダ作成
         os.makedirs("recordings", exist_ok=True)
 
-        # ffmpeg を使って録音（bot 自身の受信音声のみ）
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-f", "dshow" if os.name == "nt" else "avfoundation",
-            "-i", "audio=",
-            "-t", str(duration),
-            filename
-        ]
+        # 録音ファイル名
+        timestamp = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
+        filename = f"recordings/recording_{ctx.guild.id}_{timestamp}.mp3"
 
         await ctx.send(f"🎙️ 録音開始（{duration}秒）...")
 
+        # ffmpeg で録音を開始（Discordの音声受信を直接録音するには複雑なので、下記は録音の枠組み例）
+        # 注意: Windows/Linux/Macでの録音入力デバイス名は環境により異なります。適宜調整してください。
+        if os.name == "nt":
+            input_device = "audio=マイク名など"
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-f", "dshow",
+                "-i", input_device,
+                "-t", str(duration),
+                filename
+            ]
+        elif os.name == "posix":
+            input_device = ":0"  # macOSの例。LinuxはALSAやPulseAudio設定による
+            ffmpeg_cmd = [
+                "ffmpeg",
+                "-f", "avfoundation",
+                "-i", input_device,
+                "-t", str(duration),
+                filename
+            ]
+        else:
+            await ctx.send("❌ このOSでは録音がサポートされていません。")
+            return
+
         try:
-            process = await asyncio.create_subprocess_exec(*ffmpeg_cmd)
-            await process.wait()
-            await ctx.send(f"✅ 録音終了: {filename}")
+            process = await asyncio.create_subprocess_exec(*ffmpeg_cmd,
+                                                           stdout=asyncio.subprocess.PIPE,
+                                                           stderr=asyncio.subprocess.PIPE)
+            stdout, stderr = await process.communicate()
+
+            if process.returncode == 0:
+                await ctx.send(f"✅ 録音終了: {filename}", file=discord.File(filename))
+            else:
+                await ctx.send(f"❌ 録音に失敗しました。ffmpegエラー:\n```{stderr.decode()}```")
         except Exception as e:
-            await ctx.send(f"❌ 録音に失敗しました: {e}")
+            await ctx.send(f"❌ 録音中にエラーが発生しました: {e}")
 
 async def setup(bot):
     await bot.add_cog(Recorder(bot))
