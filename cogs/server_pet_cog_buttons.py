@@ -32,6 +32,10 @@ class PetGame(commands.Cog):
         embed.set_image(url=view.PET_IMAGE_URL)
         await ctx.send(embed=embed, view=view)
 
+# mimic test
+async def setup(bot):
+    await bot.add_cog(PetGame(bot))
+
 # 以下、PetView クラスを同ファイル内に記述し View ボタン・JSON保存処理を保持
 # bot = commands.Bot(command_prefix="!", intents=intents)
 # bot.load_extension("cogs.petgame") で cog 登録して運用
