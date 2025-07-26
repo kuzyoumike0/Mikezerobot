@@ -9,10 +9,8 @@ LAST_BUMP_FILE = "data/last_bump.json"  # 保存ファイルのパス
 class BumpReminder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.last_bump_time = None
-        # ファイルから読み込む前に Noneにしておき、
-        # Bot起動完了後にループを開始するため、startはloadの後に呼ぶ
-        # ここではstartは呼ばない
+        self.last_bump_time = None  # 初期化
+        # タスクのstartは setup() 側で明示的に呼び出すようにする
 
     def load_last_bump_time(self):
         """前回のBUMP時間をファイルから読み込む"""
@@ -40,6 +38,7 @@ class BumpReminder(commands.Cog):
     @tasks.loop(minutes=1)
     async def bump_reminder(self):
         now = datetime.utcnow()
+        print(f"[BumpReminder] now: {now}, last_bump_time: {self.last_bump_time}")
         if now - self.last_bump_time >= timedelta(hours=2):
             channel = self.bot.get_channel(BUMP_CHANNEL_ID)
             if channel:
@@ -50,10 +49,11 @@ class BumpReminder(commands.Cog):
     @bump_reminder.before_loop
     async def before_bump(self):
         await self.bot.wait_until_ready()
-        # Bot準備完了後に初回読み込み・startを行う
         self.last_bump_time = self.load_last_bump_time()
         print(f"[BumpReminder] 最終BUMP時刻読み込み完了: {self.last_bump_time.isoformat()}")
-        self.bump_reminder.start()
+
 
 async def setup(bot):
-    await bot.add_cog(BumpReminder(bot))
+    cog = BumpReminder(bot)
+    await bot.add_cog(cog)
+    cog.bump_reminder.start()  # 🔧 タスク起動
