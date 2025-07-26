@@ -49,6 +49,15 @@ class PetView(View):
         self.bot = bot
         self.user = user
 
+        # --- 表示用性格ボタン（disabled） ---
+        personalities = ["キラキラ", "カチカチ", "もちもち", "ふわふわ"]
+        for p in personalities:
+            self.add_item(Button(label=p, style=discord.ButtonStyle.secondary, disabled=True))
+
+        # --- アクションボタン（撫でる・散歩） ---
+        self.add_item(NadeButton())  # 撫でる
+        self.add_item(SanpoButton())  # 散歩
+
     def load_pet(self):
         try:
             with open("data/pets.json", "r", encoding="utf-8") as f:
