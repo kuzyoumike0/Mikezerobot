@@ -49,10 +49,9 @@ class PetView(View):
         self.bot = bot
         self.user = user
 
-        # --- 表示用性格ボタン（disabled） ---
-        personalities = ["キラキラ", "カチカチ", "もちもち", "ふわふわ"]
-        for p in personalities:
-            self.add_item(Button(label=p, style=discord.ButtonStyle.secondary, disabled=True))
+        # 餌ボタン（性格カテゴリ）
+        for label in ["キラキラ", "カチカチ", "もちもち", "ふわふわ"]:
+            self.add_item(FeedButton(label))
 
         # --- アクションボタン（撫でる・散歩） ---
         self.add_item(NadeButton())  # 撫でる
@@ -72,6 +71,47 @@ class PetView(View):
     def save_pet(self, pet_data):
         with open("data/pets.json", "w", encoding="utf-8") as f:
             json.dump(pet_data, f, ensure_ascii=False, indent=2)
+
+# 🤲 撫でるボタン
+class NadeButton(Button):
+    def __init__(self):
+        super().__init__(label="撫でる 🤲", style=discord.ButtonStyle.success)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: PetView = self.view
+        pet = view.load_pet()
+        pet["mood"] = min(100, pet.get("mood", 50) + 5)
+        pet["exp"]["pet"] = pet["exp"].get("pet", 0) + 1
+        view.save_pet(pet)
+        await interaction.response.send_message("なでなで……ミルクシュガーは嬉しそう！✨", ephemeral=True)
+
+# 🍚 餌ボタン（性格タイプで exp 加算）
+class FeedButton(Button):
+    def __init__(self, label):
+        super().__init__(label=label, style=discord.ButtonStyle.secondary)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: PetView = self.view
+        pet = view.load_pet()
+        category = self.label
+        pet["exp"][category] = pet["exp"].get(category, 0) + 1
+        pet["mood"] = min(100, pet.get("mood", 50) + 3)
+        pet["personality"] = category  # personality更新
+        view.save_pet(pet)
+        await interaction.response.send_message(f"🍚 {category}をあげました！", ephemeral=True)
+
+# 🐾 散歩ボタン
+class SanpoButton(Button):
+    def __init__(self):
+        super().__init__(label="散歩 🐾", style=discord.ButtonStyle.primary)
+
+    async def callback(self, interaction: discord.Interaction):
+        view: PetView = self.view
+        pet = view.load_pet()
+        pet["mood"] = max(0, pet.get("mood", 50) - 5)
+        pet["exp"]["walk"] = pet["exp"].get("walk", 0) + 1
+        view.save_pet(pet)
+        await interaction.response.send_message("テクテク……いい天気だったね！☀️", ephemeral=True)
 
 # mimic test
 async def setup(bot):
