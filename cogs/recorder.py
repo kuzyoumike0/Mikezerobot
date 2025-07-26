@@ -10,8 +10,8 @@ class Recorder(commands.Cog):
         self.bot = bot
         self.voice_clients = {}
 
-    @commands.command()
-    async def join(self, ctx):
+    @commands.command(name="joinrec")
+    async def joinrec(self, ctx):
         """ボイスチャンネルに参加"""
         if ctx.author.voice:
             channel = ctx.author.voice.channel
