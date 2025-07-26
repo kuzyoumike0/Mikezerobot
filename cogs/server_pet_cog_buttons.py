@@ -40,6 +40,31 @@ class PetGame(commands.Cog):
             # 発生した例外のメッセージをDiscordに送信
             await ctx.send(f"エラーが発生しました: {e}")
 
+#mimic test
+class PetView(View):
+    PET_IMAGE_URL = "https://raw.githubusercontent.com/kuzyoumike0/Mikezerobot/main/images/sample_pet.png"
+    #ペットイメージのURL指定
+
+    def __init__(self, bot, user):
+        super().__init__()
+        self.bot = bot
+        self.user = user
+
+    def load_pet(self):
+        try:
+            with open("data/shared_pet.json", "r", encoding="utf-8") as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {
+                "personality": "ふわふわ",
+                "mood": 50,
+                "exp": {"feed": 0, "walk": 0}
+            }
+
+    def save_pet(self, pet_data):
+        with open("data/shared_pet.json", "w", encoding="utf-8") as f:
+            json.dump(pet_data, f, ensure_ascii=False, indent=2)
+
 # mimic test
 async def setup(bot):
     await bot.add_cog(PetGame(bot))
