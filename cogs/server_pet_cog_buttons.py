@@ -19,6 +19,9 @@ class PetGame(commands.Cog):
             await ctx.send("このコマンドは指定チャンネルでのみ使用可能です。")
             return
 
+        #mimic test        
+        try:
+            
         # Embed + View送信
         view = PetView(self.bot, ctx.author)
         pet = view.load_pet()
@@ -31,6 +34,11 @@ class PetGame(commands.Cog):
         )
         embed.set_image(url=view.PET_IMAGE_URL)
         await ctx.send(embed=embed, view=view)
+
+        #mimic test
+        except Exception as e:
+            # 発生した例外のメッセージをDiscordに送信
+            await ctx.send(f"エラーが発生しました: {e}")
 
 # mimic test
 async def setup(bot):
