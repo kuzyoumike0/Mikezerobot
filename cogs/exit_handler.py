@@ -16,7 +16,9 @@ class ExitHandler(commands.Cog):
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         guild = member.guild
-        print(f"[ExitHandler] メンバー {member.display_name} が脱退しました。メッセージ削除を開始します。")
+        nickname = member.display_name
+        username = member.name
+        print(f"[ExitHandler] メンバーがサーバーを脱退しました。ニックネーム: {nickname}, ユーザー名: {username}")
 
         # ---- テキストカテゴリ内チャンネルのメッセージ削除 ----
         category = discord.utils.get(guild.categories, id=self.TARGET_CATEGORY_ID)
@@ -32,7 +34,7 @@ class ExitHandler(commands.Cog):
             forum = guild.get_channel(forum_id)
             if forum and isinstance(forum, discord.ForumChannel):
                 try:
-                    threads = forum.threads  # 非同期呼び出し不要
+                    threads = forum.threads
                     for thread in threads:
                         await self.delete_user_messages(thread, member)
                 except Exception as e:
