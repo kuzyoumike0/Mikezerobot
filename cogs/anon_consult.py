@@ -22,11 +22,34 @@ class AnonConsult(commands.Cog):
         with open(DATA_PATH, "w", encoding="utf-8") as f:
             json.dump(self.data, f, ensure_ascii=False, indent=2)
 
-    def generate_anon_id(self):
+    def generate_anon_id(self, ctx=None):
         index = self.data["counter"]
-        anon_id = f"匿名{chr(65 + (index % 26))}さん"  # 匿名Aさん〜Zさんをループ
+
+        letter_index = index // 100  # 0〜25（A〜Z）
+        number = (index % 100) + 1   # 1〜100
+
+        if letter_index >= 26:
+            # カウンターが上限を超えた場合、DMで通知する（ctxがあれば）
+            if ctx:
+                asyncio.create_task(self.send_limit_warning(ctx.author))
+            # ループさせず最大の匿名IDを返す
+            letter_index = 25
+            number = 100
+
+        letter = chr(65 + letter_index)  # A〜Z
+        anon_id = f"匿名{letter}{number}さん"
+
         self.data["counter"] += 1
+        self.save_data()
         return anon_id
+
+    async def send_limit_warning(self, member):
+        try:
+            await member.send(
+                "⚠️ 匿名IDが最大の組み合わせ（匿名Z100さん）に達しました。これ以上の匿名IDは発行できません。"
+            )
+        except Exception:
+            pass
 
     def is_dm(self, ctx):
         return isinstance(ctx.channel, discord.DMChannel)
@@ -42,7 +65,7 @@ class AnonConsult(commands.Cog):
             await ctx.send("❌ 投稿チャンネルが見つかりません。管理者に連絡してください。")
             return
 
-        anon_id = self.generate_anon_id()
+        anon_id = self.generate_anon_id(ctx)
         message = f"💬 **{anon_id} の相談**\n{content}"
 
         posted_msg = await channel.send(message)
@@ -72,9 +95,7 @@ class AnonConsult(commands.Cog):
             await ctx.send("❌ スレッドが見つかりませんでした。")
             return
 
-        # 返信側の匿名IDを新たに生成
-        reply_anon_id = self.generate_anon_id()
-        self.save_data()
+        reply_anon_id = self.generate_anon_id(ctx)
 
         await thread.send(f"🗨️ **{reply_anon_id} より返信：**\n{reply}")
         await ctx.send(f"✅ 匿名で返信しました！あなたの匿名IDは **{reply_anon_id}** です。")
