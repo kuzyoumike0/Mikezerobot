@@ -34,9 +34,11 @@ class MysteryGame(commands.Cog):
             "question": question,
             "answer": answer
         }
-        self.mysteries.append(new_mystery)
+
+        # 既存の謎をすべて削除して新しい謎だけを保存
+        self.mysteries = [new_mystery]
         self.save_mysteries()
-        await ctx.send(f"✅ 謎「{title}」を登録しました。")
+        await ctx.send(f"✅ 新しい謎「{title}」を登録しました（以前の謎は削除されました）。")
 
     @commands.command(name="mystery")
     async def mystery(self, ctx):
@@ -60,7 +62,6 @@ class MysteryGame(commands.Cog):
         if ctx.channel.id != MYSTERY_CHANNEL_ID:
             return
 
-        # モザイク形式でなければ警告
         if not (user_input.startswith("||") and user_input.endswith("||")):
             await ctx.send("❌ 回答は `!answer||回答||` の形式で入力してください。")
             return
@@ -77,7 +78,6 @@ class MysteryGame(commands.Cog):
         else:
             await ctx.send(f"❌ 不正解… {ctx.author.mention}")
 
-    # 変更: helpmeコマンドをmystery_helpに変更
     @commands.command(name="mystery_help")
     async def mystery_help(self, ctx):
         embed = discord.Embed(
@@ -96,7 +96,7 @@ class MysteryGame(commands.Cog):
         )
         embed.add_field(
             name='!set_mystery "タイトル" "答え" "問題文"',
-            value="謎を追加します（セット用チャンネル限定・管理者のみ）",
+            value="謎を追加します（セット用チャンネル限定・管理者のみ）\n※以前の謎は削除されます",
             inline=False
         )
         await ctx.send(embed=embed)
