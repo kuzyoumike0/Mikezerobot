@@ -10,7 +10,7 @@ from config import CATEGORY_ID, CREATEGROUP_ALLOWED_CHANNELS, PERSISTENT_VIEWS_P
 
 class CreateGroupView(View):
     def __init__(self, channel_name, message=None, participants=None):
-        super().__init__(timeout=None)  # 永続ビュー（timeoutなし）
+        super().__init__(timeout=None)
         self.channel_name = channel_name.lower().replace(" ", "-")
         self.participants = set(participants) if participants else set()
         self.message = message
@@ -35,17 +35,10 @@ class CreateGroupView(View):
             if existing_channel:
                 await existing_channel.set_permissions(user, overwrite=discord.PermissionOverwrite(
                     read_messages=True, send_messages=True))
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(
-                        f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
-                else:
-                    await interaction.followup.send(
-                        f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
+                await interaction.response.send_message(
+                    f"既存チャンネル『{self.channel_name}』に参加しました。", ephemeral=True)
             else:
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("参加を記録しました。", ephemeral=True)
-                else:
-                    await interaction.followup.send("参加を記録しました。", ephemeral=True)
+                await interaction.response.send_message("参加を記録しました。", ephemeral=True)
 
             if self.message:
                 await self.message.edit(
@@ -53,17 +46,14 @@ class CreateGroupView(View):
                     view=self)
         except Exception as e:
             print(f"[ERROR] join_callback内で例外: {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
-            else:
-                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
+            await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
 
     async def create_callback(self, interaction: discord.Interaction):
         try:
             guild = interaction.guild
             category = discord.utils.get(guild.categories, id=CATEGORY_ID)
-            self.participants.add(interaction.user.id)
 
+            # ✅ 参加者に作成者を追加しない（修正ポイント）
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False)
             }
@@ -80,25 +70,15 @@ class CreateGroupView(View):
                 for member in members:
                     await existing_channel.set_permissions(member, overwrite=discord.PermissionOverwrite(
                         read_messages=True, send_messages=True))
-                if not interaction.response.is_done():
-                    await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
-                else:
-                    await interaction.followup.send("既存のチャンネルに参加者を追加しました。", ephemeral=True)
+                await interaction.response.send_message("既存のチャンネルに参加者を追加しました。", ephemeral=True)
             else:
                 new_channel = await guild.create_text_channel(self.channel_name, overwrites=overwrites, category=category)
-                if not interaction.response.is_done():
-                    await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
-                else:
-                    await interaction.followup.send(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
+                await interaction.response.send_message(f"チャンネル『{self.channel_name}』を作成しました。 <#{new_channel.id}>", ephemeral=True)
 
-            # 参加者情報の永続化
             await self.save_persistent_views(interaction)
         except Exception as e:
             print(f"[ERROR] create_callback内で例外: {e}")
-            if not interaction.response.is_done():
-                await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
-            else:
-                await interaction.followup.send("エラーが発生しました。", ephemeral=True)
+            await interaction.response.send_message("エラーが発生しました。", ephemeral=True)
 
     async def save_persistent_views(self, interaction):
         try:
@@ -158,18 +138,14 @@ class CreateGroup(commands.Cog):
             f"「{view.channel_name}」に参加する人はボタンをクリックしてください： 参加者数: 0", view=view)
         view.message = message
 
-        # 永続ビュー情報をpersistent_views.jsonに保存
         try:
             if os.path.exists(PERSISTENT_VIEWS_PATH):
                 with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    print("[creategroup] persistent_views.json 読み込み成功")
             else:
                 data = {}
-                print("[creategroup] persistent_views.json が存在しないため新規作成")
         except json.JSONDecodeError:
             data = {}
-            print("[creategroup] persistent_views.json が壊れているため新規作成")
 
         if "creategroup" not in data:
             data["creategroup"] = []
@@ -188,39 +164,65 @@ class CreateGroup(commands.Cog):
 
     async def load_persistent_views(self):
         await self.bot.wait_until_ready()
-        print("[load_persistent_views] Bot起動完了。永続ビューをロード開始")
 
         if not os.path.exists(PERSISTENT_VIEWS_PATH):
-            print("[load_persistent_views] persistent_views.json が存在しません。終了。")
             return
 
         try:
             with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                print("[load_persistent_views] persistent_views.json 読み込み成功")
         except json.JSONDecodeError:
-            print("[load_persistent_views] persistent_views.json が壊れています。終了。")
             return
 
         entries = data.get("creategroup", [])
         for entry in entries:
             channel = self.bot.get_channel(entry["channel_id"])
             if channel is None:
-                print(f"[load_persistent_views] チャンネルID {entry['channel_id']} が見つかりません。スキップ")
                 continue
             try:
                 message = await channel.fetch_message(entry["message_id"])
                 participants = entry.get("participants", [])
                 view = CreateGroupView(entry["channel_name"], message, participants)
                 self.bot.add_view(view)
-                print(f"[load_persistent_views] メッセージID {entry['message_id']} のビューを追加しました。")
             except discord.NotFound:
-                print(f"[load_persistent_views] メッセージID {entry['message_id']} が見つかりません。スキップ")
                 continue
 
     @commands.command()
+    async def showgroup(self, ctx, *, channel_name: str):
+        """
+        参加者をニックネーム形式で表示するコマンド
+        """
+        if not os.path.exists(PERSISTENT_VIEWS_PATH):
+            await ctx.send("データが存在しません。")
+            return
+
+        try:
+            with open(PERSISTENT_VIEWS_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except json.JSONDecodeError:
+            await ctx.send("データの読み込みに失敗しました。")
+            return
+
+        entries = data.get("creategroup", [])
+        channel_name = channel_name.lower().replace(" ", "-")
+        for entry in entries:
+            if entry["channel_name"] == channel_name:
+                participant_ids = entry.get("participants", [])
+                members = []
+                for uid in participant_ids:
+                    member = ctx.guild.get_member(uid)
+                    if member:
+                        members.append(member.display_name)
+                if members:
+                    await ctx.send(f"**「{channel_name}」の参加者一覧：**\n" + "\n".join(f"- {name}" for name in members))
+                else:
+                    await ctx.send(f"「{channel_name}」の参加者はいません。")
+                return
+
+        await ctx.send(f"「{channel_name}」というグループは見つかりませんでした。")
+
+    @commands.command()
     async def testcmd(self, ctx):
-        print("[testcmd] コマンドを受け取りました。")
         await ctx.send("testcmdが動いています！")
 
 
