@@ -89,5 +89,7 @@ class VoiceRecorder(commands.Cog):
             await ctx.send(f"❌ 録音ファイルの保存中にエラーが発生しました: {e}")
             print(f"❌ 保存エラー: {e}")
 
-def setup(bot):
-    bot.add_cog(VoiceRecorder(bot))
+# ... VoiceRecorder クラスの定義のあと
+
+async def setup(bot):
+    await bot.add_cog(VoiceRecorder(bot))
