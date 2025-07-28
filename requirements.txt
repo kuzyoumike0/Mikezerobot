@@ -5,3 +5,4 @@ flask
 PyNaCl
 pytz
 asyncio
+sounddevice
