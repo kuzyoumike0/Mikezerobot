@@ -18,6 +18,7 @@ RUN apt-get update && \
     git \
     && apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+    
 
 # 作業ディレクトリを作成
 WORKDIR /app
@@ -27,6 +28,8 @@ COPY requirements.txt .
 
 # Pythonパッケージのインストール（キャッシュなし）
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install numpy sounddevice scipy
+
 
 # アプリケーションのソースコードをコピー
 COPY . .
