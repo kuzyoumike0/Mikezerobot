@@ -5,6 +5,7 @@ import os
 import logging
 from dotenv import load_dotenv
 import platform
+import sys
 
 # .envファイルから環境変数をロード
 load_dotenv()
@@ -20,16 +21,12 @@ logger = logging.getLogger("discord_bot")
 TOKEN = os.getenv("TOKEN")
 if not TOKEN:
     logger.error("❌ TOKENが設定されていません。`.env`ファイルまたは環境変数を確認してください。")
-    exit(1)
+    sys.exit(1)
 
 # Discord Intents 設定（録音Botには voice_states が必要）
-intents = discord.Intents.default()
-intents.message_content = True
-intents.voice_states = True
-intents.guilds = True
-intents.members = True
+intents = discord.Intents.all()
 
-# Bot本体
+# Bot本体の作成
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 # --- 拡張機能（Cogs）のロード ---
@@ -47,7 +44,7 @@ async def load_all_extensions():
                 await bot.load_extension(extension)
                 logger.info(f"✅ 拡張読み込み成功: {extension}")
             except Exception as e:
-                logger.error(f"❌ 拡張読み込み失敗: {extension}\n{e}")
+                logger.exception(f"❌ 拡張読み込み失敗: {extension}")
 
 # --- Botイベント定義 ---
 @bot.event
@@ -56,10 +53,9 @@ async def on_ready():
 
 @bot.event
 async def on_command_error(ctx, error):
+    if isinstance(error, commands.CommandNotFound):
+        return  # 存在しないコマンドは無視
     logger.error(f"⚠️ コマンドエラー: {ctx.command} - {error}")
-    # コマンドのないエラーは無視するか別途処理
-    if ctx.command is None:
-        return
     try:
         await ctx.send(f"❌ コマンド実行中にエラーが発生しました。\n```{error}```")
     except discord.HTTPException:
@@ -67,11 +63,16 @@ async def on_command_error(ctx, error):
 
 # --- メイン起動関数 ---
 async def main():
-    logger.info("🚀 Bot起動処理を開始します。")
+    logger.info(f"🚀 Bot起動処理を開始します。Python: {platform.python_version()}, discord.py: {discord.__version__}")
     await load_all_extensions()
     logger.info("✅ すべての拡張機能をロードしました。")
     await bot.start(TOKEN)
 
 # --- スクリプト実行 ---
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logger.info("🛑 Botの停止が要求されました。")
+    except Exception as e:
+        logger.exception(f"💥 致命的なエラーによりBotを停止します: {e}")
