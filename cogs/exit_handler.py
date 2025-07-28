@@ -1,24 +1,35 @@
 import discord
 from discord.ext import commands
+import config  # ← 設定ファイルをインポート
 
 class ExitHandler(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
 
-        # ======== 設定項目 ========
-        self.TARGET_CATEGORY_ID = 1388730912396804106  # ← テキストチャンネルのカテゴリIDを指定
-        self.TARGET_FORUM_IDS = [
-            987654321098765432,  # ← フォーラムチャンネル1のID
-            876543210987654321,  # ← フォーラムチャンネル2のID（必要に応じて追加）
-        ]
-        # ===========================
+        # ======== 設定項目（configから取得） ========
+        self.TARGET_CATEGORY_ID = config.CATEGORY_ID
+        self.TARGET_FORUM_IDS = []  # 必要ならconfigに追加してください
+        self.EXIT_LOG_CHANNEL_ID = config.EXIT_CONFIRM_CHANNEL_ID
+        # ===========================================
 
     @commands.Cog.listener()
     async def on_member_remove(self, member: discord.Member):
         guild = member.guild
         nickname = member.display_name
         username = member.name
+        user_id = member.id
+
         print(f"[ExitHandler] メンバーがサーバーを脱退しました。ニックネーム: {nickname}, ユーザー名: {username}")
+
+        # ログチャンネルにニックネームを投稿
+        log_channel = guild.get_channel(self.EXIT_LOG_CHANNEL_ID)
+        if log_channel and isinstance(log_channel, discord.TextChannel):
+            try:
+                await log_channel.send(f"👋 **{nickname}** さん（ID: `{user_id}`）がサーバーを退出しました。")
+            except Exception as e:
+                print(f"[ExitHandler] ログチャンネルへの送信失敗: {e}")
+        else:
+            print(f"[ExitHandler] ログチャンネル（ID: {self.EXIT_LOG_CHANNEL_ID}）が見つかりませんでした。")
 
         # ---- テキストカテゴリ内チャンネルのメッセージ削除 ----
         category = discord.utils.get(guild.categories, id=self.TARGET_CATEGORY_ID)
@@ -55,6 +66,6 @@ class ExitHandler(commands.Cog):
         except Exception as e:
             print(f"[ExitHandler] {channel.name} で予期しないエラー: {e}")
 
-# setup関数を非同期化し、awaitでadd_cogを呼び出す
+# setup関数を非同期で定義
 async def setup(bot):
     await bot.add_cog(ExitHandler(bot))
