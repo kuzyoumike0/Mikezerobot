@@ -1,27 +1,31 @@
 import os
 from datetime import datetime
 
-# トークンは環境変数から取得（.envなどに設定）
-TOKEN = os.getenv("TOKEN")
-
-# ギルド（サーバー）ID
-GUILD_ID = 1384327412946309160
+# ===== トークン・ギルドID =====
+TOKEN = os.getenv("TOKEN")  # .env などに設定された Discord Bot トークン
+GUILD_ID = 1384327412946309160  # サーバーID
 
 # ===== チャンネルID =====
-EXIT_CONFIRM_CHANNEL_ID = 1392965873261609110
+EXIT_CONFIRM_CHANNEL_ID = 1392965873261609110  # 脱退通知を送信するチャンネル
 BUMP_CHANNEL_ID = 1389328686192263238
 PET_COMMAND_CHANNEL_ID = 1397723707606171759  # !pet コマンド用
 PET_HELP_CHANNEL_ID = 1397793018744012880
 PET_RANKING_CHANNEL_ID = 1397794425060589692
 DAILY_POST_CHANNEL_ID = 1398250949239242752  # ペットの一言投稿用
-ANON_CHANNEL_ID = 1397965805744029706
+ANON_CHANNEL_ID = 1397965805744029706  # 匿名相談用
 MYSTERY_CHANNEL_ID = 1397863394064994395
 MYSTERY_SET_CHANNEL_ID = 1397867367882821793
 
+# ===== フォーラムチャンネルID（脱退時メッセージ削除対象） =====
+EXIT_FORUM_IDS = [
+    987654321098765432,  # フォーラムチャンネル1（例）
+    876543210987654321,  # フォーラムチャンネル2（例）
+]
+
 # ===== カテゴリID =====
-CATEGORY_ID = 1396282762004135956
+CATEGORY_ID = 1396282762004135956  # 脱退時メッセージ削除対象カテゴリ
 SECRET_CATEGORY_ID = 1397686948130459655
-VC_CATEGORY_ID = SECRET_CATEGORY_ID  # VC用カテゴリ
+VC_CATEGORY_ID = SECRET_CATEGORY_ID  # VCチャンネル用カテゴリ
 
 # ===== VC関連 =====
 ALLOWED_TEXT_CHANNEL_ID = 1393103534311997541  # VCコマンド許可テキストチャンネル
@@ -44,8 +48,8 @@ ROLE_TITLE_30 = 1397793748926201886
 ROLE_TITLE_50 = 1397794033236971601
 
 # ===== 権限・ロール関連 =====
-SPECIAL_ROLE_ID = 1396919553413353503  # 特定ロール（密談などに参加）
-MOD_ROLE_ID = 1385323031047438437  # 管理者・モデレーター
+SPECIAL_ROLE_ID = 1396919553413353503  # 特定ロール（密談参加者）
+MOD_ROLE_ID = 1385323031047438437      # 管理者・モデレーター
 
 # ===== creategroupコマンド許可チャンネル =====
 CREATEGROUP_ALLOWED_CHANNELS = [
@@ -78,6 +82,6 @@ TIME_RANGES = {
 # ===== 永続データ保存先 =====
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(CURRENT_DIR, "data")
-os.makedirs(DATA_DIR, exist_ok=True)  # ディレクトリがなければ作成
+os.makedirs(DATA_DIR, exist_ok=True)
 
 PERSISTENT_VIEWS_PATH = os.path.join(DATA_DIR, "persistent_views.json")
