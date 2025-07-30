@@ -3,12 +3,13 @@ from discord.ext import commands
 from discord.ui import View, Button
 
 class PrivateChannelButtons(View):
-    def __init__(self, bot, thread, author):
+    def __init__(self, bot, thread, author, thread_name):
         super().__init__(timeout=None)
         self.bot = bot
         self.thread = thread
         self.author = author
-        self.channel_id = None  # 作成されたチャンネルIDを記録
+        self.thread_name = thread_name
+        self.channel_id = None
 
     @discord.ui.button(label="プライベートチャンネル作成", style=discord.ButtonStyle.green)
     async def create_private_channel(self, interaction: discord.Interaction, button: Button):
@@ -27,7 +28,7 @@ class PrivateChannelButtons(View):
         }
 
         channel = await guild.create_text_channel(
-            name=f"private-{self.author.name}",
+            name=self.thread_name,
             overwrites=overwrites,
             reason="プライベートチャンネル作成"
         )
@@ -35,8 +36,8 @@ class PrivateChannelButtons(View):
         self.channel_id = channel.id
 
         await interaction.response.send_message(
-            f"✅ プライベートチャンネルを作成しました: {channel.mention}\n"
-            f"{self.author.mention} は自動的にチャンネルに参加しています。",
+            f"✅ プライベートチャンネル `{channel.name}` を作成しました。\n"
+            f"{self.author.mention} は自動的に参加済みです。",
             ephemeral=True
         )
 
@@ -52,7 +53,7 @@ class PrivateChannelButtons(View):
             return
 
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
-        await interaction.response.send_message(f"✅ あなたを {channel.mention} に追加しました。", ephemeral=True)
+        await interaction.response.send_message(f"✅ {channel.mention} に参加させました。", ephemeral=True)
 
 
 class ThreadButtonCog(commands.Cog):
@@ -60,18 +61,20 @@ class ThreadButtonCog(commands.Cog):
         self.bot = bot
 
     @commands.command(name="start_thread")
-    async def start_thread(self, ctx: commands.Context):
-        # スレッド作成
+    async def start_thread(self, ctx: commands.Context, *, thread_name: str = None):
+        if not thread_name:
+            await ctx.send("⚠️ スレッド名を指定してください。\n使用例：`!start_thread 雑談ルーム1`")
+            return
+
         thread = await ctx.channel.create_thread(
-            name=f"{ctx.author.name}のスレッド",
+            name=thread_name,
             type=discord.ChannelType.public_thread,
             auto_archive_duration=60
         )
 
-        # ボタン表示
-        view = PrivateChannelButtons(self.bot, thread, ctx.author)
+        view = PrivateChannelButtons(self.bot, thread, ctx.author, thread_name)
         await thread.send(
-            f"{ctx.author.mention} スレッドが作成されました。以下のボタンでプライベートチャンネルを作成・参加できます。",
+            f"{ctx.author.mention} スレッドが作成されました。\nボタンを使ってプライベートチャンネルを操作できます。",
             view=view
         )
 
