@@ -1,6 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
+from config import PRIVATE_CATEGORY_ID  # ← config からカテゴリIDを読み込み
 
 class PrivateChannelButtons(View):
     def __init__(self, bot, thread, author, thread_name):
@@ -22,6 +23,11 @@ class PrivateChannelButtons(View):
             return
 
         guild = interaction.guild
+        category = guild.get_channel(PRIVATE_CATEGORY_ID)
+        if category is None or not isinstance(category, discord.CategoryChannel):
+            await interaction.response.send_message("❌ 指定されたカテゴリが存在しません。管理者に連絡してください。", ephemeral=True)
+            return
+
         overwrites = {
             guild.default_role: discord.PermissionOverwrite(view_channel=False),
             self.author: discord.PermissionOverwrite(view_channel=True, send_messages=True)
@@ -29,6 +35,7 @@ class PrivateChannelButtons(View):
 
         channel = await guild.create_text_channel(
             name=self.thread_name,
+            category=category,
             overwrites=overwrites,
             reason="プライベートチャンネル作成"
         )
@@ -36,7 +43,7 @@ class PrivateChannelButtons(View):
         self.channel_id = channel.id
 
         await interaction.response.send_message(
-            f"✅ プライベートチャンネル `{channel.name}` を作成しました。\n"
+            f"✅ プライベートチャンネル `{channel.name}` を `{category.name}` に作成しました。\n"
             f"{self.author.mention} は自動的に参加済みです。",
             ephemeral=True
         )
@@ -63,7 +70,7 @@ class ThreadButtonCog(commands.Cog):
     @commands.command(name="start_thread")
     async def start_thread(self, ctx: commands.Context, *, thread_name: str = None):
         if not thread_name:
-            await ctx.send("⚠️ スレッド名を指定してください。\n使用例：`!start_thread 雑談ルーム1`")
+            await ctx.send("⚠️ スレッド名を指定してください。\n使用例：`!start_thread 作戦会議`")
             return
 
         thread = await ctx.channel.create_thread(
