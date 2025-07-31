@@ -1,94 +1,94 @@
 import discord
 from discord.ext import commands
 from discord import app_commands
-from discord.ui import View, Select
-from collections import defaultdict
+from discord.ui import View, Select, select
+import random
+import config
+
+class AnonymousVoteView(View):
+    def __init__(self, options, participants, author_dm, vote_id):
+        super().__init__(timeout=None)
+        self.vote_results = {}
+        self.participants = participants
+        self.author_dm = author_dm
+        self.vote_id = vote_id
+        self.select_menu = discord.ui.Select(
+            placeholder="投票する選択肢を選んでください",
+            min_values=1,
+            max_values=1,
+            options=[
+                discord.SelectOption(label=f"{i+1}. {opt}", value=str(i))
+                for i, opt in enumerate(options)
+            ]
+        )
+        self.select_menu.callback = self.on_select
+        self.add_item(self.select_menu)
+
+    async def on_select(self, interaction: discord.Interaction):
+        voter_id = interaction.user.id
+
+        if voter_id not in self.participants:
+            await interaction.response.send_message("あなたはVC参加者ではありません。", ephemeral=True)
+            return
+
+        if voter_id in self.vote_results:
+            await interaction.response.send_message("すでに投票済みです。", ephemeral=True)
+            return
+
+        self.vote_results[voter_id] = self.select_menu.values[0]
+        await interaction.response.send_message("投票を受け付けました。", ephemeral=True)
+
+        # 全員投票済みか確認
+        if len(self.vote_results) == len(self.participants):
+            result_counts = {}
+            for v in self.vote_results.values():
+                result_counts[v] = result_counts.get(v, 0) + 1
+
+            result_text = "🗳️ **投票結果**\n"
+            for option in self.select_menu.options:
+                count = result_counts.get(option.value, 0)
+                result_text += f"- {option.label}: {count}票\n"
+
+            await self.author_dm.send(result_text)
 
 class AnonymousVote(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.vote_sessions = {}  # {message_id: {"options": [...], "votes": {user_id: option}, "owner_id": int}}
 
-    @app_commands.command(name="anonymous_vote", description="VC参加者限定で匿名投票を開始します")
-    @app_commands.describe(question="投票の質問", options="カンマ区切りで選択肢を入力（例: A,B,C）")
-    async def anonymous_vote(self, interaction: discord.Interaction, question: str, options: str):
-        author = interaction.user
-        voice_state = author.voice
-        if not voice_state or not voice_state.channel:
-            await interaction.response.send_message("VCに参加している必要があります。", ephemeral=True)
+    @commands.command(name="anonymous_vote")
+    async def anonymous_vote(self, ctx, question: str, *choices: str):
+        """VC参加者限定の匿名投票（セレクトメニュー形式）"""
+        if len(choices) < 2 or len(choices) > 10:
+            await ctx.send("選択肢は2〜10個まで指定してください。例: `!anonymous_vote 好きな色は？ 赤 青 緑`")
             return
 
-        vc_members = [m for m in voice_state.channel.members if not m.bot]
-        if len(vc_members) < 1:
-            await interaction.response.send_message("VCに他の参加者がいません。", ephemeral=True)
+        # VC参加者の取得
+        if not ctx.author.voice or not ctx.author.voice.channel:
+            await ctx.send("まずVCに参加してください。")
             return
 
-        option_list = [opt.strip() for opt in options.split(",") if opt.strip()]
-        if len(option_list) < 2:
-            await interaction.response.send_message("少なくとも2つの選択肢が必要です。", ephemeral=True)
+        vc_channel = ctx.author.voice.channel
+        participants = [member.id for member in vc_channel.members]
+
+        # DM送信できるかチェック
+        try:
+            author_dm = await ctx.author.create_dm()
+            await author_dm.send("✅ 投票を開始します。全員の投票が完了すると結果が届きます。")
+        except discord.Forbidden:
+            await ctx.send("DMを送信できません。DMを許可してください。")
             return
 
-        embed = discord.Embed(title="匿名投票", description=question, color=discord.Color.blue())
-        for idx, opt in enumerate(option_list, start=1):
-            embed.add_field(name=f"{idx}. {opt}", value="\u200b", inline=False)
-
-        class VoteSelect(Select):
-            def __init__(self, options_list, members, vote_sessions, message_id_ref):
-                self.members = members
-                self.vote_sessions = vote_sessions
-                self.message_id_ref = message_id_ref
-                select_options = [
-                    discord.SelectOption(label=f"{i+1}. {opt}", value=str(i))
-                    for i, opt in enumerate(options_list)
-                ]
-                super().__init__(placeholder="選択肢を選んでください", min_values=1, max_values=1, options=select_options)
-
-            async def callback(self, interaction: discord.Interaction):
-                if interaction.user.id not in [m.id for m in self.members]:
-                    await interaction.response.send_message("あなたはVCに参加していないため投票できません。", ephemeral=True)
-                    return
-
-                selected = int(self.values[0])
-                message_id = self.message_id_ref[0]
-                self.vote_sessions[message_id]["votes"][interaction.user.id] = selected
-                await interaction.response.send_message("投票を受け付けました。", ephemeral=True)
-
-        message = await interaction.channel.send(
-            embed=embed,
-            view=View(VoteSelect(option_list, vc_members, self.vote_sessions, [0]))
+        embed = discord.Embed(
+            title="匿名投票",
+            description=f"**{question}**\n\n以下の選択肢から1つ選んでください（VC参加者限定）",
+            color=discord.Color.blurple()
         )
-        self.vote_sessions[message.id] = {
-            "options": option_list,
-            "votes": {},
-            "owner_id": author.id,
-            "question": question
-        }
-        # 後でID参照用にmessage_id格納
-        for item in message.components[0].children:
-            if isinstance(item, Select):
-                item.message_id_ref[0] = message.id
+        for i, choice in enumerate(choices):
+            embed.add_field(name=f"{i+1}. {choice}", value="\u200b", inline=False)
 
-        await interaction.response.send_message(f"匿名投票を開始しました。", ephemeral=True)
-
-    @app_commands.command(name="vote_result", description="自分が作成した投票の結果をDMで確認します")
-    async def vote_result(self, interaction: discord.Interaction):
-        user_id = interaction.user.id
-        found = False
-        for msg_id, session in self.vote_sessions.items():
-            if session["owner_id"] == user_id:
-                found = True
-                total = defaultdict(int)
-                for uid, sel in session["votes"].items():
-                    total[sel] += 1
-                result_text = f"**質問**: {session['question']}\n\n"
-                for i, opt in enumerate(session["options"]):
-                    count = total.get(i, 0)
-                    result_text += f"{i+1}. {opt}: {count}票\n"
-                await interaction.user.send(result_text)
-                await interaction.response.send_message("DMで結果を送信しました。", ephemeral=True)
-                break
-        if not found:
-            await interaction.response.send_message("あなたが作成した投票が見つかりません。", ephemeral=True)
+        vote_id = random.randint(1000, 9999)
+        view = AnonymousVoteView(choices, participants, author_dm, vote_id)
+        await ctx.send(embed=embed, view=view)
 
 
 async def setup(bot):
