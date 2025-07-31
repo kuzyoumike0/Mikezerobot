@@ -1,7 +1,10 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
-from config import PRIVATE_CATEGORY_ID  # config.pyから読み込み
+from config import PRIVATE_CATEGORY_ID
+
+# スレッドごとにViewを保存する辞書（グローバル）
+active_views = {}
 
 class PrivateChannelButtons(View):
     def __init__(self, bot, thread, author, thread_name):
@@ -11,7 +14,7 @@ class PrivateChannelButtons(View):
         self.author = author
         self.thread_name = thread_name
         self.channel_id = None
-        self.joined_users = set()  # ✅ 参加済みユーザーIDを保存
+        self.joined_users = set()
 
     @discord.ui.button(label="プライベートチャンネル作成", style=discord.ButtonStyle.green)
     async def create_private_channel(self, interaction: discord.Interaction, button: Button):
@@ -42,7 +45,7 @@ class PrivateChannelButtons(View):
         )
 
         self.channel_id = channel.id
-        self.joined_users.add(self.author.id)  # ✅ 作成者を参加済みに追加
+        self.joined_users.add(self.author.id)
 
         await interaction.response.send_message(
             f"✅ プライベートチャンネル `{channel.name}` を `{category.name}` に作成しました。\n"
@@ -66,7 +69,7 @@ class PrivateChannelButtons(View):
             return
 
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
-        self.joined_users.add(interaction.user.id)  # ✅ 参加済みに登録
+        self.joined_users.add(interaction.user.id)
 
         await interaction.response.send_message(f"✅ {channel.mention} に参加しました！", ephemeral=True)
 
@@ -88,10 +91,45 @@ class ThreadButtonCog(commands.Cog):
         )
 
         view = PrivateChannelButtons(self.bot, thread, ctx.author, thread_name)
+        active_views[thread.id] = view  # ✅ スレッドIDをキーに保存
+
         await thread.send(
             f"{ctx.author.mention} スレッドが作成されました。\nボタンでプライベートチャンネルを操作できます。",
             view=view
         )
+
+    @commands.command(name="show_participants")
+    async def show_participants(self, ctx: commands.Context):
+        thread_id = ctx.channel.id
+        view = active_views.get(thread_id)
+
+        if view is None:
+            await ctx.send("❌ このスレッドには参加者情報が登録されていません。")
+            return
+
+        if ctx.author != view.author:
+            await ctx.send("❌ 参加者リストを表示できるのはスレッド作成者のみです。")
+            return
+
+        if not view.joined_users:
+            await ctx.send("⚠️ まだ誰も参加していません。")
+            return
+
+        members = []
+        for user_id in view.joined_users:
+            member = ctx.guild.get_member(user_id)
+            if member:
+                members.append(member.mention)
+            else:
+                members.append(f"<@{user_id}>")
+
+        embed = discord.Embed(
+            title="✅ 現在の参加者一覧",
+            description="\n".join(members),
+            color=discord.Color.blue()
+        )
+        await ctx.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(ThreadButtonCog(bot))
