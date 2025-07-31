@@ -61,6 +61,12 @@ CREATEGROUP_ALLOWED_CHANNELS = [
     1386584590289866814
 ]
 
+#匿名投票
+VOTE_EMOJIS = ["✅", "❌"]
+
+ADMINS = []  # 今回は使わない
+
+
 # ===== VC入退室サウンド関連 =====
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",
