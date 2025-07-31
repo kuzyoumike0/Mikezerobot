@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
-from config import PRIVATE_CATEGORY_ID  # ← config からカテゴリIDを読み込み
+from config import PRIVATE_CATEGORY_ID  # config.pyから読み込み
 
 class PrivateChannelButtons(View):
     def __init__(self, bot, thread, author, thread_name):
@@ -11,6 +11,7 @@ class PrivateChannelButtons(View):
         self.author = author
         self.thread_name = thread_name
         self.channel_id = None
+        self.joined_users = set()  # ✅ 参加済みユーザーIDを保存
 
     @discord.ui.button(label="プライベートチャンネル作成", style=discord.ButtonStyle.green)
     async def create_private_channel(self, interaction: discord.Interaction, button: Button):
@@ -41,6 +42,7 @@ class PrivateChannelButtons(View):
         )
 
         self.channel_id = channel.id
+        self.joined_users.add(self.author.id)  # ✅ 作成者を参加済みに追加
 
         await interaction.response.send_message(
             f"✅ プライベートチャンネル `{channel.name}` を `{category.name}` に作成しました。\n"
@@ -54,13 +56,19 @@ class PrivateChannelButtons(View):
             await interaction.response.send_message("❌ まだプライベートチャンネルが作成されていません。", ephemeral=True)
             return
 
+        if interaction.user.id in self.joined_users:
+            await interaction.response.send_message("⚠️ あなたはすでに参加済みです。", ephemeral=True)
+            return
+
         channel = self.bot.get_channel(self.channel_id)
         if channel is None:
             await interaction.response.send_message("❌ チャンネルが見つかりません。", ephemeral=True)
             return
 
         await channel.set_permissions(interaction.user, view_channel=True, send_messages=True)
-        await interaction.response.send_message(f"✅ {channel.mention} に参加させました。", ephemeral=True)
+        self.joined_users.add(interaction.user.id)  # ✅ 参加済みに登録
+
+        await interaction.response.send_message(f"✅ {channel.mention} に参加しました！", ephemeral=True)
 
 
 class ThreadButtonCog(commands.Cog):
@@ -81,7 +89,7 @@ class ThreadButtonCog(commands.Cog):
 
         view = PrivateChannelButtons(self.bot, thread, ctx.author, thread_name)
         await thread.send(
-            f"{ctx.author.mention} スレッドが作成されました。\nボタンを使ってプライベートチャンネルを操作できます。",
+            f"{ctx.author.mention} スレッドが作成されました。\nボタンでプライベートチャンネルを操作できます。",
             view=view
         )
 
