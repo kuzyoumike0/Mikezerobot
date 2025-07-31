@@ -61,6 +61,14 @@ MYSTERY_CHANNEL_ID = 1397863394064994395
 # 謎をセットするチャンネルID（管理者が謎を登録できる場所）
 MYSTERY_SET_CHANNEL_ID = 1397867367882821793
 
+# thread_buttons.pyで使うカテゴリID（存在しないなら適切なカテゴリIDに置き換えてください）
+PRIVATE_CATEGORY_ID = 1396282762004135956  
+
+# creategroup.pyで使う設定値
+CATEGORY_ID = 1393103534311997541
+CREATEGROUP_ALLOWED_CHANNELS = [123456789012345678, 234567890123456789]
+PERSISTENT_VIEWS_PATH = "views.json"  # ファイルパスは任意の文字列でOKです
+
 # 時間帯ごとの入室音ファイル名（プロジェクトルートに配置）
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",   # 05:00 ～ 11:59
