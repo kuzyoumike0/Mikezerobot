@@ -1,118 +1,114 @@
 import discord
 from discord.ext import commands
-from discord.utils import get
-from collections import defaultdict
+from discord import app_commands
+from config import GUILD_ID
 
-number_emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟']
+class AnonymousVoteView(discord.ui.View):
+    def __init__(self, user_id, options, vote_manager):
+        super().__init__(timeout=None)
+        self.user_id = user_id
+        self.vote_manager = vote_manager
+        for idx, option in enumerate(options, start=1):
+            self.add_item(AnonymousVoteButton(str(idx), option, vote_manager, user_id))
 
-class VoteVC(commands.Cog):
+class AnonymousVoteButton(discord.ui.Button):
+    def __init__(self, label, option, vote_manager, user_id):
+        super().__init__(label=label, style=discord.ButtonStyle.primary)
+        self.option = option
+        self.vote_manager = vote_manager
+        self.user_id = user_id
+
+    async def callback(self, interaction: discord.Interaction):
+        if self.vote_manager.has_voted(self.user_id):
+            await interaction.response.send_message("すでに投票しています。", ephemeral=True)
+            return
+
+        self.vote_manager.add_vote(self.user_id, self.option)
+        await interaction.response.send_message("✅ 投票を受け付けました！", ephemeral=True)
+
+class VoteSession:
+    def __init__(self, question, options):
+        self.question = question
+        self.options = options
+        self.votes = {}  # user_id: option
+
+    def add_vote(self, user_id, option):
+        self.votes[user_id] = option
+
+    def has_voted(self, user_id):
+        return user_id in self.votes
+
+    def get_results(self):
+        from collections import Counter
+        return Counter(self.votes.values())
+
+class AnonymousVote(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.vote_sessions = {}  # message_id: {emoji: option_text}
-        self.vote_results = defaultdict(lambda: defaultdict(list))  # message_id: {emoji: [user_id]}
-        self.vote_creators = {}  # message_id: author.id
-        self.vote_vc_members = {}  # message_id: set(user.id)
+        self.vote_session = None
 
-    @commands.command(name="start_vote_vc")
-    async def start_vote_vc(self, ctx, question, *options):
-        """VC参加者限定の匿名投票を開始"""
-        if not options or len(options) > len(number_emojis):
-            return await ctx.send("選択肢は1〜10個まで指定してください。")
+    @app_commands.command(name="start_vote", description="匿名投票を開始（VC参加者へDMを送る）")
+    @app_commands.describe(question="質問内容", options="カンマ区切りの選択肢（例: 1番,2番,3番）")
+    async def start_vote(self, interaction: discord.Interaction, question: str, options: str):
+        if self.vote_session is not None:
+            await interaction.response.send_message("⚠️ すでに投票が実施中です。", ephemeral=True)
+            return
 
-        # VCに接続しているメンバーを取得
-        if ctx.author.voice is None or ctx.author.voice.channel is None:
-            return await ctx.send("VCに接続してからこのコマンドを実行してください。")
-        
-        vc_members = {member.id for member in ctx.author.voice.channel.members}
+        option_list = [opt.strip() for opt in options.split(",")]
+        self.vote_session = VoteSession(question, option_list)
 
-        # Embed 作成
-        embed = discord.Embed(title="🔒 匿名投票（VC参加者限定）", color=discord.Color.green())
-        embed.add_field(name="質問", value=question, inline=False)
+        # VC参加者取得
+        vc = interaction.user.voice
+        if vc is None or vc.channel is None:
+            await interaction.response.send_message("⚠️ VCに参加していません。", ephemeral=True)
+            self.vote_session = None
+            return
 
-        emoji_option_map = {}
-        description = ""
+        members = [m for m in vc.channel.members if not m.bot]
 
-        for i, option in enumerate(options):
-            emoji = number_emojis[i]
-            emoji_option_map[emoji] = option
-            description += f"{emoji}：{option}\n"
+        sent_count = 0
+        for member in members:
+            try:
+                dm = await member.create_dm()
+                embed = discord.Embed(
+                    title="🗳 匿名投票",
+                    description=f"**{question}**\n選択肢から一つ選んでください。",
+                    color=discord.Color.blue()
+                )
+                for idx, opt in enumerate(option_list, start=1):
+                    embed.add_field(name=f"{idx}.", value=opt, inline=False)
+                view = AnonymousVoteView(member.id, option_list, self.vote_session)
+                await dm.send(embed=embed, view=view)
+                sent_count += 1
+            except:
+                pass
 
-        embed.add_field(name="選択肢", value=description, inline=False)
-        message = await ctx.send(embed=embed)
+        await interaction.response.send_message(f"✅ 投票を開始しました。DMを送信：{sent_count}人", ephemeral=True)
 
-        # リアクションを自動付与
-        for emoji in emoji_option_map.keys():
-            await message.add_reaction(emoji)
+    @app_commands.command(name="end_vote", description="投票を終了して集計結果を表示")
+    async def end_vote(self, interaction: discord.Interaction):
+        if self.vote_session is None:
+            await interaction.response.send_message("⚠️ 現在実施中の投票はありません。", ephemeral=True)
+            return
 
-        self.vote_sessions[message.id] = emoji_option_map
-        self.vote_creators[message.id] = ctx.author.id
-        self.vote_vc_members[message.id] = vc_members
+        results = self.vote_session.get_results()
+        result_text = "\n".join(f"{opt}: {count}票" for opt, count in results.items())
 
-    @commands.command(name="end_vote_vc")
-    async def end_vote_vc(self, ctx, message_id: int):
-        """投票を終了し、集計結果をコマンド実行者にDMで送信"""
-        if message_id not in self.vote_sessions:
-            return await ctx.send("指定されたメッセージIDの投票が見つかりません。")
-
-        if self.vote_creators.get(message_id) != ctx.author.id:
-            return await ctx.send("この投票を終了できるのは投票を開始した本人だけです。")
-
-        results = self.vote_results.get(message_id, {})
-        options = self.vote_sessions[message_id]
-        summary = "🗳️ **投票結果（匿名）**\n\n"
-
-        total_votes = 0
-        for emoji, option in options.items():
-            count = len(results.get(emoji, []))
-            total_votes += count
-            summary += f"{emoji} {option}: {count}票\n"
-
-        summary += f"\n✅ 総投票数: {total_votes}票"
-
-        # DMに送信
-        try:
-            await ctx.author.send(summary)
-            await ctx.send("✅ 集計結果をDMに送信しました。")
-        except discord.Forbidden:
-            await ctx.send("❌ DMを送れませんでした。DMの設定を確認してください。")
-
-        # クリーンアップ
-        del self.vote_sessions[message_id]
-        del self.vote_results[message_id]
-        del self.vote_creators[message_id]
-        del self.vote_vc_members[message_id]
+        embed = discord.Embed(
+            title="📊 投票結果",
+            description=result_text or "投票がありませんでした。",
+            color=discord.Color.green()
+        )
+        await interaction.user.send(embed=embed)
+        self.vote_session = None
+        await interaction.response.send_message("✅ 集計結果をDMに送信しました。", ephemeral=True)
 
     @commands.Cog.listener()
-    async def on_raw_reaction_add(self, payload):
-        message_id = payload.message_id
-        if message_id not in self.vote_sessions:
-            return
-
-        if payload.user_id == self.bot.user.id:
-            return
-
-        # VC参加者か確認
-        vc_members = self.vote_vc_members.get(message_id, set())
-        if payload.user_id not in vc_members:
-            return  # VC参加者以外は無視
-
-        emoji = str(payload.emoji)
-        if emoji not in self.vote_sessions[message_id]:
-            return
-
-        # 同じユーザーの他のリアクションを削除（1票制）
-        channel = self.bot.get_channel(payload.channel_id)
-        message = await channel.fetch_message(message_id)
-        for reaction in message.reactions:
-            if str(reaction.emoji) != emoji:
-                users = await reaction.users().flatten()
-                if any(u.id == payload.user_id for u in users):
-                    await reaction.remove(discord.Object(id=payload.user_id))
-
-        # 投票記録
-        if payload.user_id not in self.vote_results[message_id][emoji]:
-            self.vote_results[message_id][emoji].append(payload.user_id)
-
+    async def on_ready(self):
+        guild = discord.Object(id=GUILD_ID)
+        self.bot.tree.copy_global_to(guild=guild)
+        await self.bot.tree.sync(guild=guild)
+        print("✅ Slash commands synced.")
 
 async def setup(bot):
-    await bot.add_cog(VoteVC(bot))
+    await bot.add_cog(AnonymousVote(bot))
