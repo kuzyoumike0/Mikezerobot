@@ -1,95 +1,125 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
-from discord.ui import View, Select, select
-import random
-import config
+import os
+from datetime import datetime
 
-class AnonymousVoteView(View):
-    def __init__(self, options, participants, author_dm, vote_id):
-        super().__init__(timeout=None)
-        self.vote_results = {}
-        self.participants = participants
-        self.author_dm = author_dm
-        self.vote_id = vote_id
-        self.select_menu = discord.ui.Select(
-            placeholder="投票する選択肢を選んでください",
-            min_values=1,
-            max_values=1,
-            options=[
-                discord.SelectOption(label=f"{i+1}. {opt}", value=str(i))
-                for i, opt in enumerate(options)
-            ]
-        )
-        self.select_menu.callback = self.on_select
-        self.add_item(self.select_menu)
+# トークンは環境変数から取得（.envなどに設定）
+TOKEN = os.getenv("TOKEN")
 
-    async def on_select(self, interaction: discord.Interaction):
-        voter_id = interaction.user.id
+# ギルド（サーバー）ID
+GUILD_ID = 1384327412946309160
 
-        if voter_id not in self.participants:
-            await interaction.response.send_message("あなたはVC参加者ではありません。", ephemeral=True)
-            return
+# 各種チャンネルID
+EXIT_CONFIRM_CHANNEL_ID = 1392965873261609110
+BUMP_CHANNEL_ID = 1389328686192263238
 
-        if voter_id in self.vote_results:
-            await interaction.response.send_message("すでに投票済みです。", ephemeral=True)
-            return
+# カテゴリID（テキストチャンネル作成先など）
+CATEGORY_ID = 1396282762004135956
+SECRET_CATEGORY_ID = 1397686948130459655
 
-        self.vote_results[voter_id] = self.select_menu.values[0]
-        await interaction.response.send_message("投票を受け付けました。", ephemeral=True)
+# VCコマンド許可テキストチャンネルID
+ALLOWED_TEXT_CHANNEL_ID = 1393103534311997541
 
-        # 全員投票済みか確認
-        if len(self.vote_results) == len(self.participants):
-            result_counts = {}
-            for v in self.vote_results.values():
-                result_counts[v] = result_counts.get(v, 0) + 1
+# VCチャンネルID（複数VC対応）
+VC_CHANNEL_IDS = {
+    "セッション１": 1386201663446057102,
+    "セッション２": 1397684964430184701,
+    "セッション３": 1397685082369818881
+}
 
-            result_text = "🗳️ **投票結果**\n"
-            for option in self.select_menu.options:
-                count = result_counts.get(option.value, 0)
-                result_text += f"- {option.label}: {count}票\n"
+# pet用のコマンド許可チャンネルID（int）
+PET_HELP_CHANNEL_ID = 1397793018744012880  # !pet_helpコマンドが許可されるチャンネルID
+PET_RANKING_CHANNEL_ID = 1397794425060589692  # !pet_rankingコマンドが許可されるチャンネルID
+PET_COMMAND_CHANNEL_ID = 139779500000000000  # ここに!petコマンドを許可するチャンネルIDを設定してください（例）
 
-            await self.author_dm.send(result_text)
+# 餌やり回数に応じた称号ロールID（例）
+FEED_TITLE_ROLES = {
+    10: 1397793352396574720,  # 10回
+    30: 1397793748926201886,  # 30回
+    50: 1397794033236971601,  # 50回
+}
 
-class AnonymousVote(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
+# ペットの一言を投稿するチャンネルID
+DAILY_POST_CHANNEL_ID = 1397897002465099887  
 
-    @commands.command(name="anonymous_vote")
-    async def anonymous_vote(self, ctx, question: str, *choices: str):
-        """VC参加者限定の匿名投票（セレクトメニュー形式）"""
-        if len(choices) < 2 or len(choices) > 10:
-            await ctx.send("選択肢は2〜10個まで指定してください。例: `!anonymous_vote 好きな色は？ 赤 青 緑`")
-            return
+# 匿名相談を投稿するチャンネルのIDに書き換えてください
+ANON_CHANNEL_ID = 1397965805744029706  
 
-        # VC参加者の取得
-        if not ctx.author.voice or not ctx.author.voice.channel:
-            await ctx.send("まずVCに参加してください。")
-            return
+# VCカテゴリID（テキストチャンネル作成用カテゴリ）
+VC_CATEGORY_ID = SECRET_CATEGORY_ID
 
-        vc_channel = ctx.author.voice.channel
-        participants = [member.id for member in vc_channel.members]
+# 特定のロールID（読み取り専用権限を与える用など）
+SPECIAL_ROLE_ID = 1396919553413353503
 
-        # DM送信できるかチェック
-        try:
-            author_dm = await ctx.author.create_dm()
-            await author_dm.send("✅ 投票を開始します。全員の投票が完了すると結果が届きます。")
-        except discord.Forbidden:
-            await ctx.send("DMを送信できません。DMを許可してください。")
-            return
+# 管理者・モデレーターのロールID
+MOD_ROLE_ID = 1385323031047438437
 
-        embed = discord.Embed(
-            title="匿名投票",
-            description=f"**{question}**\n\n以下の選択肢から1つ選んでください（VC参加者限定）",
-            color=discord.Color.blurple()
-        )
-        for i, choice in enumerate(choices):
-            embed.add_field(name=f"{i+1}. {choice}", value="\u200b", inline=False)
+# creategroupコマンドを許可するテキストチャンネルIDリスト
+CREATEGROUP_ALLOWED_CHANNELS = [1385323336699219979, 1386584590289866814]
 
-        vote_id = random.randint(1000, 9999)
-        view = AnonymousVoteView(choices, participants, author_dm, vote_id)
-        await ctx.send(embed=embed, view=view)
+# 謎を出題するテキストチャンネルID（発表用）
+MYSTERY_CHANNEL_ID = 1397863394064994395
+
+# 謎をセットするチャンネルID（管理者が謎を登録できる場所）
+MYSTERY_SET_CHANNEL_ID = 1397867367882821793
+
+# 時間帯ごとの入室音ファイル名（プロジェクトルートに配置）
+JOIN_SOUNDS = {
+    "morning": "join_morning.mp3",   # 05:00 ～ 11:59
+    "afternoon": "join_afternoon.mp3",  # 12:00 ～ 16:59
+    "evening": "join_evening.mp3",   # 17:00 ～ 21:59
+    "night": "join_night.mp3",       # 22:00 ～ 04:59
+}
+
+# 時間帯ごとの退室音ファイル名
+LEAVE_SOUNDS = {
+    "morning": "leave_morning.mp3",
+    "afternoon": "leave_afternoon.mp3",
+    "evening": "leave_evening.mp3",
+    "night": "leave_night.mp3",
+}
+
+# 時間帯の判定用（24時間制：開始時刻、終了時刻）
+TIME_RANGES = {
+    "morning": (5, 12),
+    "afternoon": (12, 17),
+    "evening": (17, 22),
+    "night": (22, 5),
+}
 
 
-async def setup(bot):
-    await bot.add_cog(AnonymousVote(bot))
+def get_current_period(hour=None):
+    """
+    現在の時間帯を判定する関数。
+    hourを指定しなければ現在時刻の時間を使用。
+
+    戻り値は 'morning', 'afternoon', 'evening', 'night' のいずれか。
+    """
+    if hour is None:
+        hour = datetime.now().hour
+
+    for period, (start, end) in TIME_RANGES.items():
+        if start < end:
+            if start <= hour < end:
+                return period
+        else:
+            # 日をまたぐ時間帯（例：22時～5時）
+            if hour >= start or hour < end:
+                return period
+    return "unknown"
+
+
+def get_join_sound():
+    """
+    現在の時間帯に対応した入室音ファイル名を返す。
+    該当なしなら None を返す。
+    """
+    period = get_current_period()
+    return JOIN_SOUNDS.get(period, None)
+
+
+def get_leave_sound():
+    """
+    現在の時間帯に対応した退室音ファイル名を返す。
+    該当なしなら None を返す。
+    """
+    period = get_current_period()
+    return LEAVE_SOUNDS.get(period, None)
