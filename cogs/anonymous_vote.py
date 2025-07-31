@@ -1,12 +1,12 @@
 import discord
 from discord.ext import commands
 from collections import Counter
-import config  # 外部設定ファイル（別途作成）
+import config
 
 class AnonymousVoteVC(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.vote_sessions = {}  # message_id: {question, author, guild_id, votes}
+        self.vote_sessions = {}  # message_id: {question, guild_id, votes}
 
     @commands.command(name="start_vote_vc")
     async def start_vote_vc(self, ctx, *, question: str):
@@ -23,7 +23,6 @@ class AnonymousVoteVC(commands.Cog):
 
         self.vote_sessions[message.id] = {
             "question": question,
-            "author": ctx.author.id,
             "guild_id": ctx.guild.id,
             "votes": {}
         }
@@ -31,17 +30,12 @@ class AnonymousVoteVC(commands.Cog):
     @commands.command(name="end_vote_vc")
     async def end_vote_vc(self, ctx, message_id: int):
         """
-        VC匿名投票を終了し、コマンド実行者のDMに結果を送信します。
+        VC匿名投票を終了し、コマンドを打った人のDMに結果を送信します。
         使用例: !end_vote_vc 123456789012345678
         """
         session = self.vote_sessions.get(message_id)
         if not session:
             await ctx.send("❌ 指定された投票IDは見つかりません。")
-            return
-
-        # コマンドを打った人が発行者または管理者であることを確認
-        if session["author"] != ctx.author.id and ctx.author.id not in config.ADMINS:
-            await ctx.send("❌ この投票を終了する権限がありません。")
             return
 
         count = Counter(session["votes"].values())
@@ -57,7 +51,7 @@ class AnonymousVoteVC(commands.Cog):
             await ctx.author.send(result_text)
             await ctx.send("📩 投票結果をDMに送信しました。")
         except discord.Forbidden:
-            await ctx.send("⚠️ DMを送信できませんでした。DMを開放してください。")
+            await ctx.send("⚠️ 結果をDMで送信できませんでした。DMの受信を有効にしてください。")
 
         del self.vote_sessions[message_id]
 
@@ -81,9 +75,9 @@ class AnonymousVoteVC(commands.Cog):
 
         # VC参加チェック
         if not member.voice or not member.voice.channel:
-            return  # VCに参加していなければ投票を無効
+            return
 
-        # 投票記録（上書き可能）
+        # 投票を記録
         session["votes"][payload.user_id] = emoji
 
     @commands.Cog.listener()
