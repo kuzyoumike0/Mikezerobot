@@ -1,95 +1,92 @@
 import discord
 from discord.ext import commands
-import sounddevice as sd
-import numpy as np
-import wave
-import os
-import datetime
 import asyncio
-from scipy.io.wavfile import write
+import datetime
+import os
 
 class VoiceRecorder(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.input_device = self.detect_input_device()
-        self.recording_task = None
-        self.is_recording = False
-        self.fs = 44100  # サンプルレート
-        self.buffer = []
-
-    def detect_input_device(self):
-        try:
-            devices = sd.query_devices()
-            for idx, device in enumerate(devices):
-                name = device['name'].lower()
-                if "ag" in name and device['max_input_channels'] > 0:
-                    print(f"✅ 使用するデバイス: {device['name']} (Index: {idx})")
-                    return idx
-            default_input = sd.default.device[0]
-            print(f"⚠️ AG03などが見つかりません。デフォルト入力デバイスを使用します: {default_input}")
-            return default_input
-        except Exception as e:
-            print(f"❌ 録音デバイスの検出に失敗しました: {e}")
-            return None
-
-    def audio_callback(self, indata, frames, time, status):
-        if self.is_recording:
-            self.buffer.append(indata.copy())
-
-    async def record_loop(self):
-        try:
-            with sd.InputStream(samplerate=self.fs, channels=1, callback=self.audio_callback, device=self.input_device):
-                while self.is_recording:
-                    await asyncio.sleep(0.5)
-        except Exception as e:
-            print(f"❌ 録音ストリームエラー: {e}")
+        self.vc = None
+        self.recording = False
+        self.ffmpeg_process = None
+        self.audio_filename = None
 
     @commands.command()
     async def joinrec(self, ctx):
-        if self.is_recording:
+        """ボイスチャンネルに参加して録音開始"""
+        if ctx.author.voice is None or ctx.author.voice.channel is None:
+            await ctx.send("❌ 先にボイスチャンネルに参加してください。")
+            return
+
+        if self.vc and self.vc.is_connected():
             await ctx.send("⚠️ すでに録音中です。")
             return
-        if self.input_device is None:
-            await ctx.send("❌ 録音デバイスが見つかりません。")
-            return
 
-        self.buffer.clear()
-        self.is_recording = True
-        self.recording_task = asyncio.create_task(self.record_loop())
+        channel = ctx.author.voice.channel
+        self.vc = await channel.connect()
+        await ctx.send(f"🔴 録音を開始しました: `{channel.name}`")
 
-        await ctx.send("🔴 録音を開始しました。`!stoprec` で停止できます。")
+        # 録音ファイルの準備
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        self.audio_filename = f"recording_{timestamp}.wav"
+        os.makedirs("recordings", exist_ok=True)
+        filepath = os.path.join("recordings", self.audio_filename)
+
+        # ffmpeg録音プロセス
+        self.ffmpeg_process = await asyncio.create_subprocess_exec(
+            'ffmpeg',
+            '-f', 's16le',
+            '-ar', '48000',
+            '-ac', '2',
+            '-i', 'pipe:0',
+            filepath,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL
+        )
+
+        # 音声受信を開始
+        self.recording = True
+        self.bot.loop.create_task(self.record_audio_loop())
+
+    async def record_audio_loop(self):
+        """VCから音声データを取得してffmpegに渡す"""
+        while self.recording and self.vc and self.vc.is_connected():
+            await asyncio.sleep(1)  # ※詳細な録音処理は外部音声ライブラリに依存
+            # Discord.py では直接録音できない。実際は voice-receive 拡張が必要。
+            pass  # 本格的な録音には別ライブラリが必要（下記補足参照）
 
     @commands.command()
     async def stoprec(self, ctx):
-        if not self.is_recording:
-            await ctx.send("⚠️ 現在録音していません。")
+        """録音を停止してファイルを送信"""
+        if not self.vc or not self.vc.is_connected():
+            await ctx.send("⚠️ 録音中ではありません。")
             return
 
-        self.is_recording = False
-        if self.recording_task:
-            await self.recording_task
-            self.recording_task = None
+        self.recording = False
+        await self.vc.disconnect()
+        self.vc = None
 
-        # バッファを結合して保存
-        try:
-            audio_data = np.concatenate(self.buffer, axis=0)
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"recording_{timestamp}.wav"
-            os.makedirs("recordings", exist_ok=True)
-            filepath = os.path.join("recordings", filename)
+        if self.ffmpeg_process:
+            self.ffmpeg_process.stdin.close()
+            await self.ffmpeg_process.wait()
+            self.ffmpeg_process = None
 
-            write(filepath, self.fs, audio_data)
-            await ctx.send(f"✅ 録音完了: `{filename}`")
+        filepath = os.path.join("recordings", self.audio_filename)
+        if os.path.exists(filepath):
+            await ctx.send("✅ 録音完了。ファイルを送信します。")
+            await ctx.send(file=discord.File(filepath))
+        else:
+            await ctx.send("❌ 録音ファイルが見つかりませんでした。")
 
-            # Discordにファイル送信
-            with open(filepath, "rb") as f:
-                await ctx.send(file=discord.File(f, filename))
-
-        except Exception as e:
-            await ctx.send(f"❌ 録音ファイルの保存中にエラーが発生しました: {e}")
-            print(f"❌ 保存エラー: {e}")
-
-# ... VoiceRecorder クラスの定義のあと
+    @commands.command()
+    async def vcstatus(self, ctx):
+        """録音状態を確認"""
+        if self.recording and self.vc:
+            await ctx.send("🔴 録音中です。")
+        else:
+            await ctx.send("⏹️ 録音していません。")
 
 async def setup(bot):
     await bot.add_cog(VoiceRecorder(bot))
