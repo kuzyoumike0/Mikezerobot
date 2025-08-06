@@ -69,6 +69,8 @@ CATEGORY_ID = 1396282762004135956
 CREATEGROUP_ALLOWED_CHANNELS = [1385323336699219979, 1386584590289866814]
 PERSISTENT_VIEWS_PATH = "views.json"  # ファイルパスは任意の文字列でOKです
 
+CATEGORY_ID = 1396282762004135956  # プライベートチャンネルを作成するカテゴリID
+
 # 時間帯ごとの入室音ファイル名（プロジェクトルートに配置）
 JOIN_SOUNDS = {
     "morning": "join_morning.mp3",   # 05:00 ～ 11:59
