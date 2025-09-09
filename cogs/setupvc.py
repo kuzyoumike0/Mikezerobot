@@ -83,9 +83,11 @@ class VCChannelView(discord.ui.View):
             nickname = member.nick if member.nick else member.name
             channel_name = f"{nickname}-{self.vc_name.lower()}-{date_str}".replace(" ", "-").lower()
 
+            # ✅ 個別チャンネルにコマンド実行者（self.author）も含める
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                member: discord.PermissionOverwrite(read_messages=True, send_messages=True)
+                member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                self.author: discord.PermissionOverwrite(read_messages=True, send_messages=True),
             }
 
             role = guild.get_role(SPECIAL_ROLE_ID)
