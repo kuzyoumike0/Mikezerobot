@@ -32,70 +32,50 @@ class VCChannelView(discord.ui.View):
         self.author = author
         self.vc_name = vc_name
 
-    def get_vc_members(self, guild):
-        vc_channel = guild.get_channel(VC_CHANNEL_IDS[self.vc_name])
-        return [m for m in vc_channel.members if not m.bot] if vc_channel else []
+    def get_vc_members(self, guild: discord.Guild):
+        vc_id = VC_CHANNEL_IDS.get(self.vc_name)
+        if not vc_id:
+            return None, f"設定エラー: VC_CHANNEL_IDS に『{self.vc_name}』が見つかりません。"
+        vc_channel = guild.get_channel(vc_id)
+        if vc_channel is None:
+            return None, f"VCが見つかりません（ID: {vc_id}）。Botの権限や設定を確認してください。"
+        if not isinstance(vc_channel, discord.VoiceChannel):
+            return None, f"指定IDはボイスチャンネルではありません（ID: {vc_id}）。"
+        members = [m for m in vc_channel.members if not m.bot]
+        return members, None
 
     @discord.ui.button(label="VC参加者共有チャンネル作成", style=discord.ButtonStyle.primary)
     async def create_shared(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        members = self.get_vc_members(guild)
+        try:
+            await interaction.response.defer(ephemeral=True)
+            guild = interaction.guild
 
-        if not members:
-            await interaction.response.send_message("VCに誰もいません。", ephemeral=True)
-            return
+            members, err = self.get_vc_members(guild)
+            if err:
+                await interaction.followup.send(f"❌ {err}", ephemeral=True)
+                return
+            if not members:
+                await interaction.followup.send("⚠️ VCに参加者がいません（Botは除外）。", ephemeral=True)
+                return
 
-        now = datetime.now(timezone(timedelta(hours=9)))
-        now_str = now.strftime("%Y%m%d-%H%M")
-        channel_name = f"{self.vc_name.lower()}-{now_str}"
+            category = guild.get_channel(VC_CATEGORY_ID)
+            if category is None or not isinstance(category, discord.CategoryChannel):
+                await interaction.followup.send(f"❌ カテゴリが見つかりません（ID: {VC_CATEGORY_ID}）。", ephemeral=True)
+                return
 
-        overwrites = {
-            guild.default_role: discord.PermissionOverwrite(view_channel=False)
-        }
-        for member in members:
-            overwrites[member] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=True, read_message_history=True
-            )
+            me = guild.me
+            if not category.permissions_for(me).manage_channels:
+                await interaction.followup.send("❌ Botに『チャンネルの管理』権限がありません。", ephemeral=True)
+                return
 
-        role = guild.get_role(SPECIAL_ROLE_ID)
-        if role:
-            overwrites[role] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=False, read_message_history=True
-            )
+            now = datetime.now(timezone(timedelta(hours=9)))
+            channel_name = f"{self.vc_name.lower()}-{now.strftime('%Y%m%d-%H%M')}"
 
-        category = discord.utils.get(guild.categories, id=VC_CATEGORY_ID)
-        channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
-
-        view = DeleteChannelButton(channel=channel, author=self.author)
-        await channel.send("このチャンネルを削除するには以下のボタンを押してください。", view=view)
-        await interaction.response.send_message(f"{channel.mention} を作成しました。", ephemeral=False)
-
-    @discord.ui.button(label="VC参加者個別チャンネル作成", style=discord.ButtonStyle.secondary)
-    async def create_individual(self, interaction: discord.Interaction, button: discord.ui.Button):
-        guild = interaction.guild
-        members = self.get_vc_members(guild)
-
-        if not members:
-            await interaction.response.send_message("VCに誰もいません。", ephemeral=True)
-            return
-
-        # ✅ コマンド実行者をギルドメンバーとして取得
-        author_in_guild = guild.get_member(self.author.id) or self.author
-
-        now = datetime.now(timezone(timedelta(hours=9)))
-        date_str = now.strftime("%Y%m%d")
-        category = discord.utils.get(guild.categories, id=VC_CATEGORY_ID)
-        created_channels = []
-
-        for member in members:
-            nickname = member.nick if member.nick else member.name
-            channel_name = f"{nickname}-{self.vc_name.lower()}-{date_str}".replace(" ", "-").lower()
-
-            overwrites = {
-                guild.default_role: discord.PermissionOverwrite(view_channel=False),
-                member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-                author_in_guild: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
-            }
+            overwrites = {guild.default_role: discord.PermissionOverwrite(view_channel=False)}
+            for m in members:
+                overwrites[m] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=True, read_message_history=True
+                )
 
             role = guild.get_role(SPECIAL_ROLE_ID)
             if role:
@@ -105,10 +85,67 @@ class VCChannelView(discord.ui.View):
 
             channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
             view = DeleteChannelButton(channel=channel, author=self.author)
-            await channel.send(f"{member.mention} の個別チャンネルです。削除ボタンはこちら👇", view=view)
-            created_channels.append(channel.mention)
+            await channel.send("このチャンネルを削除するには以下のボタンを押してください。", view=view)
+            await interaction.followup.send(f"✅ 共有チャンネルを作成しました：{channel.mention}", ephemeral=True)
 
-        await interaction.response.send_message("個別チャンネルを作成しました：\n" + "\n".join(created_channels), ephemeral=False)
+        except Exception as e:
+            await interaction.followup.send(f"❌ エラー: {type(e).__name__} {e}", ephemeral=True)
+            raise
+
+    @discord.ui.button(label="VC参加者個別チャンネル作成", style=discord.ButtonStyle.secondary)
+    async def create_individual(self, interaction: discord.Interaction, button: discord.ui.Button):
+        try:
+            await interaction.response.defer(ephemeral=True)
+            guild = interaction.guild
+
+            members, err = self.get_vc_members(guild)
+            if err:
+                await interaction.followup.send(f"❌ {err}", ephemeral=True)
+                return
+            if not members:
+                await interaction.followup.send("⚠️ VCに参加者がいません（Botは除外）。", ephemeral=True)
+                return
+
+            category = guild.get_channel(VC_CATEGORY_ID)
+            if category is None or not isinstance(category, discord.CategoryChannel):
+                await interaction.followup.send(f"❌ カテゴリが見つかりません（ID: {VC_CATEGORY_ID}）。", ephemeral=True)
+                return
+
+            me = guild.me
+            if not category.permissions_for(me).manage_channels:
+                await interaction.followup.send("❌ Botに『チャンネルの管理』権限がありません。", ephemeral=True)
+                return
+
+            author_in_guild = guild.get_member(self.author.id) or self.author
+            now = datetime.now(timezone(timedelta(hours=9)))
+            date_str = now.strftime("%Y%m%d")
+
+            created_mentions = []
+            for m in members:
+                nickname = m.nick or m.name
+                channel_name = f"{nickname}-{self.vc_name.lower()}-{date_str}".replace(" ", "-").lower()
+
+                overwrites = {
+                    guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                    m: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+                    author_in_guild: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+                }
+                role = guild.get_role(SPECIAL_ROLE_ID)
+                if role:
+                    overwrites[role] = discord.PermissionOverwrite(
+                        view_channel=True, send_messages=False, read_message_history=True
+                    )
+
+                channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
+                view = DeleteChannelButton(channel=channel, author=self.author)
+                await channel.send(f"{m.mention} の個別チャンネルです。削除ボタンはこちら👇", view=view)
+                created_mentions.append(channel.mention)
+
+            await interaction.followup.send("✅ 個別チャンネルを作成しました：\n" + "\n".join(created_mentions), ephemeral=True)
+
+        except Exception as e:
+            await interaction.followup.send(f"❌ エラー: {type(e).__name__} {e}", ephemeral=True)
+            raise
 
 # --------------------------
 # VC選択ビュー
@@ -154,5 +191,3 @@ class SetupVC(commands.Cog):
 # --------------------------
 async def setup(bot: commands.Bot):
     await bot.add_cog(SetupVC(bot))
-
-
