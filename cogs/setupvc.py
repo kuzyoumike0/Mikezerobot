@@ -1,3 +1,4 @@
+# cogs/setupvc.py
 import discord
 from discord.ext import commands
 from discord.ui import View, Button
@@ -52,11 +53,15 @@ class VCChannelView(discord.ui.View):
             guild.default_role: discord.PermissionOverwrite(view_channel=False)
         }
         for member in members:
-            overwrites[member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
+            overwrites[member] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
 
         role = guild.get_role(SPECIAL_ROLE_ID)
         if role:
-            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
+            overwrites[role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=False, read_message_history=True
+            )
 
         category = discord.utils.get(guild.categories, id=VC_CATEGORY_ID)
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
@@ -74,7 +79,7 @@ class VCChannelView(discord.ui.View):
             await interaction.response.send_message("VCに誰もいません。", ephemeral=True)
             return
 
-        # ✅ コマンド実行者は Guild の Member を取り直す
+        # ✅ コマンド実行者をギルドメンバーとして取得
         author_in_guild = guild.get_member(self.author.id) or self.author
 
         now = datetime.now(timezone(timedelta(hours=9)))
@@ -86,7 +91,6 @@ class VCChannelView(discord.ui.View):
             nickname = member.nick if member.nick else member.name
             channel_name = f"{nickname}-{self.vc_name.lower()}-{date_str}".replace(" ", "-").lower()
 
-            # ✅ メンバー本人＋コマンド実行者を明示的に許可
             overwrites = {
                 guild.default_role: discord.PermissionOverwrite(view_channel=False),
                 member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
@@ -95,7 +99,9 @@ class VCChannelView(discord.ui.View):
 
             role = guild.get_role(SPECIAL_ROLE_ID)
             if role:
-                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
+                overwrites[role] = discord.PermissionOverwrite(
+                    view_channel=True, send_messages=False, read_message_history=True
+                )
 
             channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
             view = DeleteChannelButton(channel=channel, author=self.author)
@@ -143,5 +149,8 @@ class SetupVC(commands.Cog):
             return
         await ctx.send("どのVCを対象にしますか？", view=VCSelectorView(bot=self.bot, author=ctx.author))
 
-async def setup(bot):
+# --------------------------
+# async setup エントリポイント
+# --------------------------
+async def setup(bot: commands.Bot):
     await bot.add_cog(SetupVC(bot))
