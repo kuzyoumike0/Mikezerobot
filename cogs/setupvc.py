@@ -49,14 +49,14 @@ class VCChannelView(discord.ui.View):
         channel_name = f"{self.vc_name.lower()}-{now_str}"
 
         overwrites = {
-            guild.default_role: discord.PermissionOverwrite(read_messages=False)
+            guild.default_role: discord.PermissionOverwrite(view_channel=False)
         }
         for member in members:
-            overwrites[member] = discord.PermissionOverwrite(read_messages=True, send_messages=True)
+            overwrites[member] = discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True)
 
         role = guild.get_role(SPECIAL_ROLE_ID)
         if role:
-            overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=False)
+            overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
 
         category = discord.utils.get(guild.categories, id=VC_CATEGORY_ID)
         channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
@@ -74,6 +74,9 @@ class VCChannelView(discord.ui.View):
             await interaction.response.send_message("VCに誰もいません。", ephemeral=True)
             return
 
+        # ✅ コマンド実行者は Guild の Member を取り直す
+        author_in_guild = guild.get_member(self.author.id) or self.author
+
         now = datetime.now(timezone(timedelta(hours=9)))
         date_str = now.strftime("%Y%m%d")
         category = discord.utils.get(guild.categories, id=VC_CATEGORY_ID)
@@ -83,16 +86,16 @@ class VCChannelView(discord.ui.View):
             nickname = member.nick if member.nick else member.name
             channel_name = f"{nickname}-{self.vc_name.lower()}-{date_str}".replace(" ", "-").lower()
 
-            # ✅ 個別チャンネルにコマンド実行者（self.author）も含める
+            # ✅ メンバー本人＋コマンド実行者を明示的に許可
             overwrites = {
-                guild.default_role: discord.PermissionOverwrite(read_messages=False),
-                member: discord.PermissionOverwrite(read_messages=True, send_messages=True),
-                self.author: discord.PermissionOverwrite(read_messages=True, send_messages=True),
+                guild.default_role: discord.PermissionOverwrite(view_channel=False),
+                member: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
+                author_in_guild: discord.PermissionOverwrite(view_channel=True, send_messages=True, read_message_history=True),
             }
 
             role = guild.get_role(SPECIAL_ROLE_ID)
             if role:
-                overwrites[role] = discord.PermissionOverwrite(read_messages=True, send_messages=False)
+                overwrites[role] = discord.PermissionOverwrite(view_channel=True, send_messages=False, read_message_history=True)
 
             channel = await guild.create_text_channel(channel_name, overwrites=overwrites, category=category)
             view = DeleteChannelButton(channel=channel, author=self.author)
