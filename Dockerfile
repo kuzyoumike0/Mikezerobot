@@ -34,5 +34,6 @@ RUN pip install numpy sounddevice scipy
 # アプリケーションのソースコードをコピー
 COPY . .
 
+
 # コンテナ起動時に bot を実行
 CMD ["python", "bot.py"]
