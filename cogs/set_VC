@@ -1,0 +1,89 @@
+import discord
+from discord.ext import commands
+from discord.ui import Button, View
+import config
+
+class DeleteVCButton(Button):
+    def __init__(self, voice_channel: discord.VoiceChannel):
+        super().__init__(label="このVCを削除", style=discord.ButtonStyle.red, custom_id=f"delete_vc:{voice_channel.id}")
+        self.voice_channel = voice_channel
+
+    async def callback(self, interaction: discord.Interaction):
+        if interaction.user != self.voice_channel.guild.get_member(self.voice_channel.id):  # 簡易チェック
+            # より厳密にしたい場合は作成者情報を保存する（後述）
+            await interaction.response.send_message("❌ このボタンは作成者しか使用できません。", ephemeral=True)
+            return
+
+        try:
+            await self.voice_channel.delete(reason=f"Deleted by button - {interaction.user}")
+            await interaction.response.send_message("✅ VCを削除しました。", ephemeral=True)
+        except discord.Forbidden:
+            await interaction.response.send_message("❌ 削除権限がありません。", ephemeral=True)
+        except Exception as e:
+            await interaction.response.send_message(f"❌ 削除に失敗しました: {e}", ephemeral=True)
+
+
+class SetVCCog(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.max_vc = 5  # 最大作成数
+
+    @commands.command(name="setvc", aliases=["set VC", "vcset"])
+    @commands.has_permissions(manage_channels=True)
+    async def set_vc(self, ctx, *, vc_name: str = None):
+        """セッション1のカテゴリにVCを作成（最大5個まで）"""
+        if not vc_name:
+            await ctx.send("❌ VCの名前を指定してください。\n例: `!set VC 勉強会`")
+            return
+
+        # セッション1のカテゴリを取得（config.pyから）
+        category = ctx.guild.get_channel(config.VC_CHANNEL_IDS.get("セッション１"))  # または config.SECRET_CATEGORY_ID など
+
+        if not category or not isinstance(category, discord.CategoryChannel):
+            await ctx.send(f"❌ セッション1のカテゴリが見つかりません (configを確認してください)")
+            return
+
+        # 同じカテゴリ内のVC数をチェック
+        existing_vcs = [ch for ch in category.channels if isinstance(ch, discord.VoiceChannel)]
+        if len(existing_vcs) >= self.max_vc:
+            await ctx.send(f"❌ セッション1にはすでに最大 **{self.max_vc}個** のVCがあります。これ以上作成できません。")
+            return
+
+        try:
+            # VC作成
+            voice_channel = await ctx.guild.create_voice_channel(
+                name=vc_name,
+                category=category,
+                reason=f"Created by {ctx.author} using !set VC"
+            )
+
+            # 削除ボタン付きViewを作成
+            view = View(timeout=None)  # 永続化
+            view.add_item(DeleteVCButton(voice_channel))
+
+            embed = discord.Embed(
+                title="✅ VCを作成しました",
+                description=f"**{voice_channel.name}**",
+                color=discord.Color.green()
+            )
+            embed.add_field(name="作成者", value=ctx.author.mention, inline=True)
+            embed.add_field(name="カテゴリ", value=category.name, inline=True)
+
+            await ctx.send(embed=embed, view=view)
+
+        except discord.Forbidden:
+            await ctx.send("❌ Botに「チャンネルの管理」権限がありません。")
+        except Exception as e:
+            await ctx.send(f"❌ エラーが発生しました: {e}")
+
+    @set_vc.error
+    async def set_vc_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("❌ このコマンドには「チャンネル管理」権限が必要です。")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("❌ VCの名前を入力してください。")
+
+
+# Cog登録
+async def setup(bot):
+    await bot.add_cog(SetVCCog(bot))
