@@ -182,6 +182,69 @@ class MonthlyCategory(commands.Cog):
             print(f"[ERROR] createmonthlycategory: {error}")
             await ctx.send("エラーが発生しました。")
 
+    # ---------------- 手動コマンド：チャンネルを月別カテゴリへ移動 ----------------
+    @commands.command(name="movetomonth")
+    @commands.has_permissions(administrator=True)
+    async def movetomonth(self, ctx, date_str: str):
+        """
+        コマンドを打ったチャンネルを、指定した月（月/日）のカテゴリへ移動する（管理者のみ）。
+        年は指定不要。入力した月が現在の月より前なら自動で来年扱いになる。
+        対象月のカテゴリが存在しない場合はエラーになる（事前に !createmonthlycategory で作成しておくこと）。
+
+        使い方:
+          !movetomonth 7/15   → （実行月によって今年7月 or 来年7月）のカテゴリへ移動
+        """
+        parts = date_str.split("/")
+        if len(parts) != 2:
+            await ctx.send("入力形式が正しくありません。例: `!movetomonth 7/15`")
+            return
+
+        try:
+            month = int(parts[0])
+            day = int(parts[1])
+        except ValueError:
+            await ctx.send("入力形式が正しくありません。例: `!movetomonth 7/15`")
+            return
+
+        now = datetime.datetime.now(JST)
+        # 入力した月が現在の月より前なら、来年扱いにする
+        year = now.year if month >= now.month else now.year + 1
+
+        try:
+            target_date = datetime.date(year, month, day)
+        except ValueError:
+            await ctx.send("存在しない日付です。月日を確認してください。")
+            return
+
+        category_name = get_category_name(target_date)
+        category = discord.utils.get(ctx.guild.categories, name=category_name)
+
+        if category is None:
+            await ctx.send(
+                f"カテゴリ『{category_name}』が見つかりません。"
+                f"先に `!createmonthlycategory {target_date.year} {target_date.month}` で作成してください。"
+            )
+            return
+
+        try:
+            await ctx.channel.edit(category=category, sync_permissions=False)
+        except discord.HTTPException as e:
+            print(f"[ERROR] movetomonth: {e}")
+            await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
+            return
+
+        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動しました。")
+
+    @movetomonth.error
+    async def movetomonth_error(self, ctx, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.send("このコマンドは管理者のみ使用できます。")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("月/日を指定してください。例: `!movetomonth 7/15`")
+        else:
+            print(f"[ERROR] movetomonth: {error}")
+            await ctx.send("エラーが発生しました。")
+
 
 async def setup(bot):
     await bot.add_cog(MonthlyCategory(bot))
