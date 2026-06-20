@@ -58,7 +58,8 @@ class PrivateChannelCreator(commands.Cog):
         view.channel = channel
 
         await ctx.send(
-            f"✅ プライベートチャンネル **{channel_name}** を作成しました！参加者は下のボタンを押してください。",
+            f"✅ プライベートチャンネル **{channel_name}** を作成しました！参加者は下のボタンを押してください。
+            日程調整終了後、【!m2m 月/日】でカテゴリ移動をお願いします。",
             view=view
         )
 
