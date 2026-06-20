@@ -17,7 +17,7 @@ MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
 # 自動作成は「何ヶ月先」のカテゴリを作るか（例: 3なら7月に11月分を作る）
 MONTHS_AHEAD = 3
 
-# !movetomonth を使えるロール名（これ or 管理者のみ）
+# !m2m を使えるロール名（これ or 管理者のみ）
 GM_ROLE_NAME = "GM"
 
 # このコグが作るカテゴリ名（「2026年7月」など）にマッチする正規表現
@@ -55,7 +55,7 @@ def is_gm_or_admin():
 
 
 def is_allowed_category(category: discord.CategoryChannel) -> bool:
-    """movetomonthを使ってよいチャンネルかどうか
+    """m2mを使ってよいチャンネルかどうか
     （卓用ch作成カテゴリ1 / 月別カテゴリ / ○月開催卓カテゴリ 配下のみ）"""
     if category is None:
         return False
@@ -221,9 +221,9 @@ class MonthlyCategory(commands.Cog):
             await ctx.send("エラーが発生しました。")
 
     # ---------------- 手動コマンド：チャンネルを月別カテゴリへ移動 ----------------
-    @commands.command(name="movetomonth")
+    @commands.command(name="m2m")
     @is_gm_or_admin()
-    async def movetomonth(self, ctx, date_str: str):
+    async def m2m(self, ctx, date_str: str):
         """
         コマンドを打ったチャンネルを、指定した月（月/日）のカテゴリへ移動する（GMロール or 管理者のみ）。
         使用できるのは「卓用ch作成カテゴリ1」配下、!createmonthlycategory で作られた
@@ -232,7 +232,7 @@ class MonthlyCategory(commands.Cog):
         対象月のカテゴリが存在しない場合はエラーになる（事前に !createmonthlycategory で作成しておくこと）。
 
         使い方:
-          !movetomonth 7/15   → （実行月によって今年7月 or 来年7月）のカテゴリへ移動
+          !m2m 7/15   → （実行月によって今年7月 or 来年7月）のカテゴリへ移動
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
@@ -240,14 +240,14 @@ class MonthlyCategory(commands.Cog):
 
         parts = date_str.split("/")
         if len(parts) != 2:
-            await ctx.send("入力形式が正しくありません。例: `!movetomonth 7/15`")
+            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
             return
 
         try:
             month = int(parts[0])
             day = int(parts[1])
         except ValueError:
-            await ctx.send("入力形式が正しくありません。例: `!movetomonth 7/15`")
+            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
             return
 
         now = datetime.datetime.now(JST)
@@ -273,20 +273,20 @@ class MonthlyCategory(commands.Cog):
         try:
             await ctx.channel.edit(category=category, sync_permissions=False)
         except discord.HTTPException as e:
-            print(f"[ERROR] movetomonth: {e}")
+            print(f"[ERROR] m2m: {e}")
             await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
             return
 
         await ctx.send(f"✅ このチャンネルを『{category_name}』に移動しました。")
 
-    @movetomonth.error
-    async def movetomonth_error(self, ctx, error):
+    @m2m.error
+    async def m2m_error(self, ctx, error):
         if isinstance(error, NotGMOrAdmin):
             await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("月/日を指定してください。例: `!movetomonth 7/15`")
+            await ctx.send("月/日を指定してください。例: `!m2m 7/15`")
         else:
-            print(f"[ERROR] movetomonth: {error}")
+            print(f"[ERROR] m2m: {error}")
             await ctx.send("エラーが発生しました。")
 
 
