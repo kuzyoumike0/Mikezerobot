@@ -5,7 +5,10 @@ import os
 import datetime
 from zoneinfo import ZoneInfo
 
-from config import GUILD_ID
+from config import GUILD_ID, VC_CHANNEL_IDS
+
+# 新カテゴリをこのチャンネルの真上に配置する
+REFERENCE_CHANNEL_KEY = "セッション１"
 
 JST = ZoneInfo("Asia/Tokyo")
 MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
@@ -57,6 +60,27 @@ class MonthlyCategory(commands.Cog):
         with open(MONTHLY_CATEGORY_DATA_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
 
+    # ---------------- 位置調整（『セッション１』の真上に配置） ----------------
+    async def position_above_reference(self, guild: discord.Guild, category: discord.CategoryChannel):
+        ref_id = VC_CHANNEL_IDS.get(REFERENCE_CHANNEL_KEY)
+        if ref_id is None:
+            print(f"[MonthlyCategory] config.VC_CHANNEL_IDSに『{REFERENCE_CHANNEL_KEY}』がありません。位置調整をスキップします。")
+            return
+
+        ref_channel = guild.get_channel(ref_id)
+        if ref_channel is None:
+            print(f"[MonthlyCategory] 基準チャンネル『{REFERENCE_CHANNEL_KEY}』が見つかりません。位置調整をスキップします。")
+            return
+
+        # セッション１がカテゴリ配下にあるなら、そのカテゴリの位置に合わせる（＝そのカテゴリの真上に来る）
+        # カテゴリ未所属（直下）なら、チャンネル自体の位置に合わせる
+        target_position = ref_channel.category.position if ref_channel.category else ref_channel.position
+
+        try:
+            await category.edit(position=target_position)
+        except discord.HTTPException as e:
+            print(f"[MonthlyCategory] カテゴリの位置調整に失敗しました: {e}")
+
     # ---------------- カテゴリ作成本体 ----------------
     async def create_monthly_category(self, guild: discord.Guild, target_date: datetime.date):
         """対象月のカテゴリが無ければ作成する。
@@ -70,6 +94,7 @@ class MonthlyCategory(commands.Cog):
             return existing, False
 
         category = await guild.create_category(category_name)
+        await self.position_above_reference(guild, category)
         print(f"[MonthlyCategory] カテゴリ『{category_name}』を作成しました。")
         return category, True
 
