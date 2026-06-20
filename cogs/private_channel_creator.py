@@ -62,7 +62,7 @@ class PrivateChannelCreator(commands.Cog):
             view=view
         )
 
-        await channel.send(f"🔒 このチャンネルは **{ctx.author.display_name}** により作成されました。")
+        await channel.send(f"🔒 このチャンネルは **{ctx.author.display_name}** により作成されました。日程調整後、"!m2m 月/日"でカテゴリの移動をお願いします。")
         await channel.send("チャンネルを削除したい場合は以下のボタンを押してください。", view=view)
 
 
