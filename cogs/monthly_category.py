@@ -2,10 +2,11 @@ import discord
 from discord.ext import commands, tasks
 import json
 import os
+import re
 import datetime
 from zoneinfo import ZoneInfo
 
-from config import GUILD_ID, VC_CHANNEL_IDS
+from config import GUILD_ID, VC_CHANNEL_IDS, CATEGORY_ID
 
 # 新カテゴリをこのチャンネルの真上に配置する
 REFERENCE_CHANNEL_KEY = "セッション１"
@@ -15,6 +16,12 @@ MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
 
 # 自動作成は「何ヶ月先」のカテゴリを作るか（例: 3なら7月に11月分を作る）
 MONTHS_AHEAD = 3
+
+# !movetomonth を使えるロール名（これ or 管理者のみ）
+GM_ROLE_NAME = "GM"
+
+# このコグが作るカテゴリ名（「2026年7月」など）にマッチする正規表現
+MONTHLY_CATEGORY_NAME_PATTERN = re.compile(r"^\d+年\d+月$")
 
 
 def get_category_name(target_date: datetime.date) -> str:
@@ -28,6 +35,31 @@ def add_months(base_date: datetime.date, months: int) -> datetime.date:
     year = base_date.year + month_index // 12
     month = month_index % 12 + 1
     return datetime.date(year, month, 1)
+
+
+class NotGMOrAdmin(commands.CheckFailure):
+    pass
+
+
+def is_gm_or_admin():
+    async def predicate(ctx):
+        if ctx.author.guild_permissions.administrator:
+            return True
+        if discord.utils.get(ctx.author.roles, name=GM_ROLE_NAME):
+            return True
+        raise NotGMOrAdmin("GMロールまたは管理者のみ使用できます。")
+    return commands.check(predicate)
+
+
+def is_allowed_category(category: discord.CategoryChannel) -> bool:
+    """movetomonthを使ってよいチャンネルかどうか（卓用ch作成カテゴリ1 or 月別カテゴリ配下のみ）"""
+    if category is None:
+        return False
+    if category.id == CATEGORY_ID:
+        return True
+    if MONTHLY_CATEGORY_NAME_PATTERN.match(category.name):
+        return True
+    return False
 
 
 class MonthlyCategory(commands.Cog):
@@ -184,16 +216,22 @@ class MonthlyCategory(commands.Cog):
 
     # ---------------- 手動コマンド：チャンネルを月別カテゴリへ移動 ----------------
     @commands.command(name="movetomonth")
-    @commands.has_permissions(administrator=True)
+    @is_gm_or_admin()
     async def movetomonth(self, ctx, date_str: str):
         """
-        コマンドを打ったチャンネルを、指定した月（月/日）のカテゴリへ移動する（管理者のみ）。
+        コマンドを打ったチャンネルを、指定した月（月/日）のカテゴリへ移動する（GMロール or 管理者のみ）。
+        使用できるのは「卓用ch作成カテゴリ1」配下、または !createmonthlycategory で作られた
+        月別カテゴリ配下のチャンネルのみ。
         年は指定不要。入力した月が現在の月より前なら自動で来年扱いになる。
         対象月のカテゴリが存在しない場合はエラーになる（事前に !createmonthlycategory で作成しておくこと）。
 
         使い方:
           !movetomonth 7/15   → （実行月によって今年7月 or 来年7月）のカテゴリへ移動
         """
+        if not is_allowed_category(ctx.channel.category):
+            await ctx.send("このチャンネルではこのコマンドは使えません。")
+            return
+
         parts = date_str.split("/")
         if len(parts) != 2:
             await ctx.send("入力形式が正しくありません。例: `!movetomonth 7/15`")
@@ -237,8 +275,8 @@ class MonthlyCategory(commands.Cog):
 
     @movetomonth.error
     async def movetomonth_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            await ctx.send("このコマンドは管理者のみ使用できます。")
+        if isinstance(error, NotGMOrAdmin):
+            await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
         elif isinstance(error, commands.MissingRequiredArgument):
             await ctx.send("月/日を指定してください。例: `!movetomonth 7/15`")
         else:
