@@ -321,12 +321,13 @@ class MonthlyCategory(commands.Cog):
         embed.add_field(name="👥 参加者", value=members_str, inline=False)
         await log_channel.send(embed=embed)
 
-    # ---------------- 1週間前サイレントリマインド ----------------
-    async def _week_reminder_task(
+    # ---------------- サイレントリマインド送信 ----------------
+    async def _reminder_task(
         self,
         channel: discord.TextChannel,
         session_dt: datetime.datetime,
         mentions: list[str],
+        label: str,
         wait_seconds: float,
     ):
         await asyncio.sleep(wait_seconds)
@@ -334,26 +335,99 @@ class MonthlyCategory(commands.Cog):
         try:
             await channel.send(
                 f"🔔 {mention_str}\n"
-                f"📅 1週間後（{session_dt.strftime('%m月%d日 %H:%M')}）に卓があります！",
+                f"📅 {label}（{session_dt.strftime('%m月%d日 %H:%M')}）に卓があります！",
                 suppress_notifications=True,
             )
         except Exception as e:
-            print(f"[MonthlyCategory] 1週間前リマインド送信失敗: {e}")
+            print(f"[MonthlyCategory] リマインド送信失敗（{label}）: {e}")
 
-    # ---------------- 手動コマンド：チャンネルを月別カテゴリへ移動 ----------------
+    def _schedule_reminder(self, channel, session_dt, mentions, remind_dt, label, now):
+        """リマインドをスケジュールし、登録できた場合は remind_dt を返す。過去なら None を返す。"""
+        wait_seconds = (remind_dt - now).total_seconds()
+        if wait_seconds <= 0:
+            return None
+        task = asyncio.create_task(
+            self._reminder_task(channel, session_dt, mentions, label, wait_seconds)
+        )
+        self._pending_reminders.append(task)
+        task.add_done_callback(
+            lambda t: self._pending_reminders.remove(t) if t in self._pending_reminders else None
+        )
+        return remind_dt
+
+    # ---------------- 手動コマンド：シンプル移動（!m2m 月/日） ----------------
+    @commands.command(name="m2m")
+    @is_gm_or_admin()
+    async def m2m(self, ctx, date_str: str):
+        """
+        コマンドを打ったチャンネルを指定した月のカテゴリへ移動する（GMロール or 管理者のみ）。
+        時刻・メンション不要のシンプル版。ログ・通知なし。
+        使い方: !m2m 7/15
+        """
+        if not is_allowed_category(ctx.channel.category):
+            await ctx.send("このチャンネルではこのコマンドは使えません。")
+            return
+
+        parts = date_str.split("/")
+        if len(parts) != 2:
+            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
+            return
+
+        try:
+            month, day = int(parts[0]), int(parts[1])
+        except ValueError:
+            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
+            return
+
+        now = datetime.datetime.now(JST)
+        year = now.year if month >= now.month else now.year + 1
+
+        try:
+            target_date = datetime.date(year, month, day)
+        except ValueError:
+            await ctx.send("存在しない日付です。確認してください。")
+            return
+
+        category_name = get_category_name(target_date)
+        category = discord.utils.get(ctx.guild.categories, name=category_name)
+
+        if category is None:
+            await ctx.send(
+                f"カテゴリ『{category_name}』が見つかりません。"
+                f"先に `!createmonthlycategory {year} {month}` で作成してください。"
+            )
+            return
+
+        try:
+            await ctx.channel.edit(category=category, sync_permissions=False)
+        except discord.HTTPException as e:
+            print(f"[ERROR] m2m: {e}")
+            await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
+            return
+
+        self.save_channel_date(ctx.channel.id, target_date)
+        await self.sort_category_by_date(category)
+        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動し、開催日順に並び替えました。")
+
+    @m2m.error
+    async def m2m_error(self, ctx, error):
+        if isinstance(error, NotGMOrAdmin):
+            await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
+        elif isinstance(error, commands.MissingRequiredArgument):
+            await ctx.send("月/日を指定してください。例: `!m2m 7/15`")
+        else:
+            print(f"[ERROR] m2m: {error}")
+            await ctx.send("エラーが発生しました。")
+
+    # ---------------- 手動コマンド：拡張移動（!m2m2 月/日/時分 @mentions） ----------------
     @commands.command(name="m2m2")
     @is_gm_or_admin()
     async def m2m2(self, ctx, date_str: str, *members: discord.Member):
         """
-        コマンドを打ったチャンネルを指定した月のカテゴリへ移動する（GMロール or 管理者のみ）。
-        使用できるのは「卓用ch作成カテゴリ1」配下、!createmonthlycategory で作られた
-        月別カテゴリ配下、または「6月開催卓」「7月開催」のような開催月カテゴリ配下のチャンネルのみ。
-        年は指定不要。入力した月が現在の月より前なら自動で来年扱いになる。
-        対象月のカテゴリが存在しない場合はエラーになる（事前に !createmonthlycategory で作成しておくこと）。
-
+        チャンネル移動 + ログ記録 + 1日前・1時間前にサイレント通知（GMロール or 管理者のみ）。
         使い方:
           !m2m2 7/15/1800              → 7月15日18時のカテゴリへ移動
-          !m2m2 7/15/1800 @user1 @user2 → 上記 + ログ記録 & 1週間前にサイレント通知
+          !m2m2 7/15/1800 @user1 @user2 → 上記 + ログ記録 & 1日前・1時間前にサイレント通知
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
@@ -400,7 +474,6 @@ class MonthlyCategory(commands.Cog):
             await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
             return
 
-        # 開催日を保存して開催日順ソート
         self.save_channel_date(ctx.channel.id, session_dt.date())
         await self.sort_category_by_date(category)
 
@@ -409,7 +482,6 @@ class MonthlyCategory(commands.Cog):
             f"📅 開催日時: {session_dt.strftime('%Y年%m月%d日 %H:%M')}"
         )
 
-        # ── ユーザーIDがある場合: ログ記録 & 1週間前リマインド ──
         if not members:
             return
 
@@ -418,28 +490,20 @@ class MonthlyCategory(commands.Cog):
         # ログ送信
         await self.send_session_log(ctx.guild, ctx.channel, session_dt, mentions)
 
-        # 1週間前 18:00 のリマインドをスケジュール
-        remind_dt = datetime.datetime(
-            year, month, day, tzinfo=JST
-        ) - datetime.timedelta(days=7)
-        remind_dt = remind_dt.replace(hour=18, minute=0, second=0, microsecond=0)
+        # ── 1日前・1時間前のサイレントリマインドをスケジュール ──
+        remind_1day  = session_dt - datetime.timedelta(days=1)
+        remind_1hour = session_dt - datetime.timedelta(hours=1)
 
-        wait_seconds = (remind_dt - now).total_seconds()
-        if wait_seconds > 0:
-            task = asyncio.create_task(
-                self._week_reminder_task(ctx.channel, session_dt, mentions, wait_seconds)
-            )
-            self._pending_reminders.append(task)
-            task.add_done_callback(
-                lambda t: self._pending_reminders.remove(t)
-                if t in self._pending_reminders else None
-            )
-            await ctx.send(
-                f"⏰ 1週間前リマインドを登録しました。\n"
-                f"📬 送信予定: {remind_dt.strftime('%m月%d日 18:00')}（サイレント通知）"
-            )
+        scheduled = []
+        if self._schedule_reminder(ctx.channel, session_dt, mentions, remind_1day, "1日後", now):
+            scheduled.append(f"📬 1日前: {remind_1day.strftime('%m月%d日 %H:%M')}")
+        if self._schedule_reminder(ctx.channel, session_dt, mentions, remind_1hour, "1時間後", now):
+            scheduled.append(f"📬 1時間前: {remind_1hour.strftime('%m月%d日 %H:%M')}")
+
+        if scheduled:
+            await ctx.send("⏰ サイレント通知を登録しました。\n" + "\n".join(scheduled))
         else:
-            await ctx.send("⚠️ 1週間前がすでに過ぎているためリマインドは登録しませんでした。")
+            await ctx.send("⚠️ 通知タイミングがすでに過ぎているため登録しませんでした。")
 
     @m2m2.error
     async def m2m2_error(self, ctx, error):
