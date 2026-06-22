@@ -140,6 +140,14 @@ class MonthlyCategory(commands.Cog):
     async def sort_category_by_date(self, category: discord.CategoryChannel):
         """カテゴリ内のチャンネルを、保存済みの開催日（古い→新しい）順に並び替える。
         開催日が未登録のチャンネルは末尾（元の並び順を維持）にする。
+
+        【アルゴリズム】
+        古い→新しい順に並べたいので、
+        逆順（新しい→古い）に1つずつカテゴリの先頭へ移動する。
+        例: [A(7/1), B(7/5), C(7/10)] にしたい場合
+          C を先頭へ → [C]
+          B を先頭へ → [B, C]
+          A を先頭へ → [A, B, C] ✓
         """
         data = self.load_data()
         channel_dates = data.get("channel_dates", {})
@@ -154,25 +162,18 @@ class MonthlyCategory(commands.Cog):
             return (1, datetime.date.max, ch.position)
 
         async def reorder(channels):
-            if not channels:
+            if len(channels) <= 1:
                 return
+
+            # 古い→新しい順にソートして逆順（新しい→古い）で先頭に積む
             ordered = sorted(channels, key=sort_key)
-            # 先頭チャンネルをカテゴリの一番上に移動
-            try:
-                await ordered[0].move(
-                    beginning=True, category=category, sync_permissions=False
-                )
-            except discord.HTTPException as e:
-                print(f"[MonthlyCategory] 先頭チャンネルの移動に失敗しました（{ordered[0].name}）: {e}")
-                return
-            # 2番目以降を直前のチャンネルの後ろに順に移動
-            for i in range(1, len(ordered)):
+            for ch in reversed(ordered):
                 try:
-                    await ordered[i].move(
-                        after=ordered[i - 1], category=category, sync_permissions=False
+                    await ch.move(
+                        beginning=True, category=category, sync_permissions=False
                     )
                 except discord.HTTPException as e:
-                    print(f"[MonthlyCategory] チャンネル並び替えに失敗しました（{ordered[i].name}）: {e}")
+                    print(f"[MonthlyCategory] チャンネル並び替えに失敗しました（{ch.name}）: {e}")
 
         await reorder(category.text_channels)
         await reorder(category.voice_channels)
