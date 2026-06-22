@@ -425,7 +425,7 @@ class MonthlyCategory(commands.Cog):
             )
             await ctx.send(
                 f"⏰ 1週間前リマインドを登録しました。\n"
-                f"📬 送信予定: {remind_dt.strftime('%m月%d日 18:00')}（サイレント通知）"
+                f"📬 送信予定: {remind_dt.strftime('%m月%d日 18:00')}"
             )
         else:
             await ctx.send("⚠️ 1週間前がすでに過ぎているためリマインドは登録しませんでした。")
