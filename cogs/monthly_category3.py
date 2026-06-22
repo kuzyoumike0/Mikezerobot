@@ -332,7 +332,7 @@ class MonthlyCategory(commands.Cog):
     # ---------------- 手動コマンド：チャンネルを月別カテゴリへ移動 ----------------
     @commands.command(name="m2m2")
     @is_gm_or_admin()
-    async def m2m2(self, ctx, date_str: str, *user_ids: str):
+    async def m2m2(self, ctx, date_str: str, *members: discord.Member):
         """
         コマンドを打ったチャンネルを指定した月のカテゴリへ移動する（GMロール or 管理者のみ）。
         使用できるのは「卓用ch作成カテゴリ1」配下、!createmonthlycategory で作られた
@@ -342,7 +342,7 @@ class MonthlyCategory(commands.Cog):
 
         使い方:
           !m2m2 7/15/1800              → 7月15日18時のカテゴリへ移動
-          !m2m2 7/15/1800 ID1 ID2 ...  → 上記 + ログ記録 & 1週間前にサイレント通知
+          !m2m2 7/15/1800 @user1 @user2 → 上記 + ログ記録 & 1週間前にサイレント通知
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
@@ -399,18 +399,10 @@ class MonthlyCategory(commands.Cog):
         )
 
         # ── ユーザーIDがある場合: ログ記録 & 1週間前リマインド ──
-        if not user_ids:
+        if not members:
             return
 
-        mentions = []
-        for uid_str in user_ids:
-            try:
-                mentions.append(f"<@{int(uid_str)}>")
-            except ValueError:
-                await ctx.send(f"⚠️ `{uid_str}` は無効なIDのためスキップします。")
-
-        if not mentions:
-            return
+        mentions = [m.mention for m in members]
 
         # ログ送信
         await self.send_session_log(ctx.guild, ctx.channel, session_dt, mentions)
