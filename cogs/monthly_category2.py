@@ -86,17 +86,67 @@ class MonthlyCategory(commands.Cog):
     # ---------------- 永続化（重複作成防止用） ----------------
     def load_data(self) -> dict:
         if not os.path.exists(MONTHLY_CATEGORY_DATA_PATH):
-            return {"last_created": None}
+            return {"last_created": None, "channel_dates": {}}
         try:
             with open(MONTHLY_CATEGORY_DATA_PATH, "r", encoding="utf-8") as f:
-                return json.load(f)
+                data = json.load(f)
+                data.setdefault("channel_dates", {})
+                return data
         except json.JSONDecodeError:
-            return {"last_created": None}
+            return {"last_created": None, "channel_dates": {}}
 
     def save_data(self, data: dict):
         os.makedirs(os.path.dirname(MONTHLY_CATEGORY_DATA_PATH), exist_ok=True)
         with open(MONTHLY_CATEGORY_DATA_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=4)
+
+    def save_channel_date(self, channel_id: int, target_date: datetime.date):
+        """!m2mで指定された開催日（月/日→年月日）をチャンネルごとに保存する"""
+        data = self.load_data()
+        channel_dates = data.get("channel_dates", {})
+        channel_dates[str(channel_id)] = target_date.isoformat()
+        data["channel_dates"] = channel_dates
+        self.save_data(data)
+
+    def get_channel_date(self, channel_id: int):
+        data = self.load_data()
+        date_str = data.get("channel_dates", {}).get(str(channel_id))
+        if not date_str:
+            return None
+        try:
+            return datetime.date.fromisoformat(date_str)
+        except ValueError:
+            return None
+
+    # ---------------- カテゴリ内を開催日順に並び替え ----------------
+    async def sort_category_by_date(self, category: discord.CategoryChannel):
+        """カテゴリ内のチャンネルを、保存済みの開催日（古い→新しい）順に並び替える。
+        開催日が未登録のチャンネルは末尾（元の並び順を維持）にする。
+        """
+        data = self.load_data()
+        channel_dates = data.get("channel_dates", {})
+
+        def sort_key(ch):
+            date_str = channel_dates.get(str(ch.id))
+            if date_str:
+                try:
+                    d = datetime.date.fromisoformat(date_str)
+                    return (0, d, ch.position)
+                except ValueError:
+                    pass
+            return (1, datetime.date.max, ch.position)
+
+        async def reorder(channels):
+            ordered = sorted(channels, key=sort_key)
+            for index, ch in enumerate(ordered):
+                if ch.position != index:
+                    try:
+                        await ch.edit(position=index)
+                    except discord.HTTPException as e:
+                        print(f"[MonthlyCategory] チャンネル並び替えに失敗しました（{ch.name}）: {e}")
+
+        await reorder(category.text_channels)
+        await reorder(category.voice_channels)
 
     # ---------------- 位置調整（『セッション１』の真上に配置） ----------------
     async def position_above_reference(self, guild: discord.Guild, category: discord.CategoryChannel):
@@ -277,7 +327,11 @@ class MonthlyCategory(commands.Cog):
             await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
             return
 
-        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動しました。")
+        # 開催日を保存し、カテゴリ内を開催日順に並び替える
+        self.save_channel_date(ctx.channel.id, target_date)
+        await self.sort_category_by_date(category)
+
+        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動し、開催日順に並び替えました。")
 
     @m2m.error
     async def m2m_error(self, ctx, error):
