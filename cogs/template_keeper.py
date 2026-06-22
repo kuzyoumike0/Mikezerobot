@@ -28,6 +28,8 @@ class TemplateKeeper(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
+        # 同時に複数の on_message が走っても1回だけ処理するためのロック
+        self._lock = asyncio.Lock()
 
     async def cog_load(self):
         asyncio.create_task(self._init_template())
@@ -53,7 +55,6 @@ class TemplateKeeper(commands.Cog):
 
     # ---------------- テンプレート送信・削除 ----------------
     async def delete_old_template(self, channel: discord.TextChannel):
-        """保存済みのテンプレートメッセージIDがあれば削除する"""
         data = self.load_data()
         for key in ("msg1_id", "msg2_id"):
             mid = data.get(key)
@@ -62,32 +63,29 @@ class TemplateKeeper(commands.Cog):
                     msg = await channel.fetch_message(mid)
                     await msg.delete()
                 except (discord.NotFound, discord.HTTPException):
-                    pass  # 既に削除済みなら無視
+                    pass
         self.save_data({"msg1_id": None, "msg2_id": None})
 
     async def send_template(self, channel: discord.TextChannel):
-        """テンプレートを2通送信してIDを保存する"""
         msg1 = await channel.send(MESSAGE_1)
         msg2 = await channel.send(MESSAGE_2)
         self.save_data({"msg1_id": msg1.id, "msg2_id": msg2.id})
 
     async def ensure_template(self):
-        """起動時にテンプレートが存在するか確認し、なければ送信する"""
         channel = self.bot.get_channel(TEMPLATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             print(f"[TemplateKeeper] チャンネルID {TEMPLATE_CHANNEL_ID} が見つかりません。")
             return
 
         data = self.load_data()
-        # 既存のメッセージが生きているか確認
         if data.get("msg1_id") and data.get("msg2_id"):
             try:
                 await channel.fetch_message(data["msg1_id"])
                 await channel.fetch_message(data["msg2_id"])
                 print("[TemplateKeeper] 既存のテンプレートメッセージを確認しました。")
-                return  # 両方存在すれば再送不要
+                return
             except (discord.NotFound, discord.HTTPException):
-                pass  # どちらかが消えていたら再送する
+                pass
 
         await self.delete_old_template(channel)
         await self.send_template(channel)
@@ -96,17 +94,22 @@ class TemplateKeeper(commands.Cog):
     # ---------------- メッセージ監視 ----------------
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):
-        # Bot自身のメッセージは無視（無限ループ防止）
-        if message.author.bot:
+        # Bot自身（このBotのID）のメッセージは無視
+        if message.author.id == self.bot.user.id:
             return
 
         # 対象チャンネル以外は無視
         if message.channel.id != TEMPLATE_CHANNEL_ID:
             return
 
-        channel = message.channel
-        await self.delete_old_template(channel)
-        await self.send_template(channel)
+        # ロック中（前の処理が終わっていない）なら何もしない
+        if self._lock.locked():
+            return
+
+        async with self._lock:
+            channel = message.channel
+            await self.delete_old_template(channel)
+            await self.send_template(channel)
 
 
 async def setup(bot):
