@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 import json
 import os
+import asyncio
 
 TEMPLATE_DATA_PATH = "data/template_messages.json"
 
@@ -29,6 +30,9 @@ class TemplateKeeper(commands.Cog):
         self.bot = bot
 
     async def cog_load(self):
+        asyncio.create_task(self._init_template())
+
+    async def _init_template(self):
         await self.bot.wait_until_ready()
         await self.ensure_template()
 
