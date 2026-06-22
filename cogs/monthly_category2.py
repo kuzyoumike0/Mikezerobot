@@ -331,7 +331,7 @@ class MonthlyCategory(commands.Cog):
         self.save_channel_date(ctx.channel.id, target_date)
         await self.sort_category_by_date(category)
 
-        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動し、開催日順に並び替えました。")
+        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動しました。")
 
     @m2m.error
     async def m2m_error(self, ctx, error):
