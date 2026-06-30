@@ -118,47 +118,79 @@ class MonthlyCategory(commands.Cog):
         except ValueError:
             return None
 
-    # ---------------- カテゴリ内を開催日順に並び替え ----------------
-    async def sort_category_by_date(self, category: discord.CategoryChannel):
-        """カテゴリ内のチャンネルを、保存済みの開催日（古い→新しい）順に並び替える。
-        開催日が未登録のチャンネルは末尾（元の並び順を維持）にする。
+    # ---------------- 指定チャンネルを開催日順の正しい位置へ挿入 ----------------
+    async def insert_channel_by_date(self, category: discord.CategoryChannel, target_channel):
+        """
+        target_channel を、同じ種類（テキスト/ボイス）の既存チャンネルと開催日を
+        上から順に比較しながら、自分より遅い日付に達したところで止めて
+        その直前に挿入する（挿入ソート方式）。
 
-        【アルゴリズム】
-        古い→新しい順に並べたいので、
-        逆順（新しい→古い）に1つずつカテゴリの先頭へ移動する。
-        例: [A(7/1), B(7/5), C(7/10)] にしたい場合
-          C を先頭へ → [C]
-          B を先頭へ → [B, C]
-          A を先頭へ → [A, B, C] ✓
+        例: [A(7/1), B(7/5), C(7/10), D(7/20)] に 7/15 を挿入する場合
+          Aと比較 → 7/15の方が遅い → 次へ
+          Bと比較 → 7/15の方が遅い → 次へ
+          Cと比較 → 7/15の方が遅い → 次へ
+          Dと比較 → 7/15の方が早い → Dの直前に挿入
+          結果: [A(7/1), B(7/5), C(7/10), 新規(7/15), D(7/20)]
+
+        日付未登録のチャンネルは比較対象に含めない（位置はそのまま動かさない）。
         """
         data = self.load_data()
         channel_dates = data.get("channel_dates", {})
 
-        def sort_key(ch):
+        target_date_str = channel_dates.get(str(target_channel.id))
+        if not target_date_str:
+            return  # 自分自身に日付がなければ何もしない
+        try:
+            target_date = datetime.date.fromisoformat(target_date_str)
+        except ValueError:
+            return
+
+        # 同じ種類のチャンネル一覧（自分以外・日付が登録済みのもののみ）
+        if isinstance(target_channel, discord.VoiceChannel):
+            siblings = category.voice_channels
+        else:
+            siblings = category.text_channels
+
+        dated_siblings = []
+        for ch in siblings:
+            if ch.id == target_channel.id:
+                continue
             date_str = channel_dates.get(str(ch.id))
-            if date_str:
-                try:
-                    return (0, datetime.date.fromisoformat(date_str), ch.position)
-                except ValueError:
-                    pass
-            return (1, datetime.date.max, ch.position)
+            if not date_str:
+                continue
+            try:
+                d = datetime.date.fromisoformat(date_str)
+            except ValueError:
+                continue
+            dated_siblings.append((ch, d))
 
-        async def reorder(channels):
-            if len(channels) <= 1:
-                return
+        # 既存の並び順（position）を信頼して上から順に比較
+        dated_siblings.sort(key=lambda pair: pair[0].position)
 
-            # 古い→新しい順にソートして逆順（新しい→古い）で先頭に積む
-            ordered = sorted(channels, key=sort_key)
-            for ch in reversed(ordered):
-                try:
-                    await ch.move(
-                        beginning=True, category=category, sync_permissions=False
-                    )
-                except discord.HTTPException as e:
-                    print(f"[MonthlyCategory] チャンネル並び替えに失敗しました（{ch.name}）: {e}")
+        insert_before = None
+        for ch, d in dated_siblings:
+            if d > target_date:
+                insert_before = ch
+                break
 
-        await reorder(category.text_channels)
-        await reorder(category.voice_channels)
+        try:
+            if insert_before is not None:
+                await target_channel.move(
+                    before=insert_before, category=category, sync_permissions=False
+                )
+            elif dated_siblings:
+                # 自分より遅い日付が無い＝最後尾（日付未登録チャンネルより前）
+                last_dated = dated_siblings[-1][0]
+                await target_channel.move(
+                    after=last_dated, category=category, sync_permissions=False
+                )
+            else:
+                # 日付登録済みの他チャンネルが無ければ先頭でよい
+                await target_channel.move(
+                    beginning=True, category=category, sync_permissions=False
+                )
+        except discord.HTTPException as e:
+            print(f"[MonthlyCategory] チャンネル挿入に失敗しました（{target_channel.name}）: {e}")
 
     # ---------------- 位置調整（『セッション１』の真上に配置） ----------------
     async def position_above_reference(self, guild: discord.Guild, category: discord.CategoryChannel):
@@ -289,7 +321,7 @@ class MonthlyCategory(commands.Cog):
             return
 
         self.save_channel_date(ctx.channel.id, target_date)
-        await self.sort_category_by_date(category)
+        await self.insert_channel_by_date(category, ctx.channel)
         await ctx.send(
             f"✅ このチャンネルを『{category_name}』に移動し、"
             f"開催日（{target_date.strftime('%Y年%m月%d日')}）を記録して並び替えました。"
@@ -338,7 +370,7 @@ class MonthlyCategory(commands.Cog):
             return
 
         self.save_channel_date(ctx.channel.id, target_date)
-        await self.sort_category_by_date(ctx.channel.category)
+        await self.insert_channel_by_date(ctx.channel.category, ctx.channel)
         await ctx.send(
             f"✅ このチャンネルの開催日を {target_date.strftime('%Y年%m月%d日')} に登録し、"
             f"カテゴリ内を並び替えました。"
