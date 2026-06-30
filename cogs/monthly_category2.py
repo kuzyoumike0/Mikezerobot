@@ -357,8 +357,7 @@ class MonthlyCategory(commands.Cog):
         self.save_channel_date(ctx.channel.id, target_date)
         await self.insert_channel_by_date(category, ctx.channel)
         await ctx.send(
-            f"✅ このチャンネルを『{category_name}』に移動し、"
-            f"開催日（{target_date.strftime('%Y年%m月%d日')}）を記録して並び替えました。"
+            f"✅ このチャンネルを『{category_name}』に移動しました。"
         )
 
     @m2m.error
