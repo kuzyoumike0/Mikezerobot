@@ -192,6 +192,40 @@ class MonthlyCategory(commands.Cog):
         except discord.HTTPException as e:
             print(f"[MonthlyCategory] チャンネル挿入に失敗しました（{target_channel.name}）: {e}")
 
+    # ---------------- カテゴリ全体を記録済み日付で完全に再構築 ----------------
+    async def full_resort_category(self, category: discord.CategoryChannel):
+        """カテゴリ内の全チャンネルを、保存済みの開催日（古い→新しい）順に
+        ゼロから並び替える。過去のバージョンで崩れた並びや、
+        日付未登録のまま放置されたチャンネルとの不整合をまとめて修正する。
+
+        日付未登録のチャンネルは末尾に残す（元の相対順は維持）。
+        """
+        data = self.load_data()
+        channel_dates = data.get("channel_dates", {})
+
+        def sort_key(ch):
+            date_str = channel_dates.get(str(ch.id))
+            if date_str:
+                try:
+                    return (0, datetime.date.fromisoformat(date_str), ch.position)
+                except ValueError:
+                    pass
+            return (1, datetime.date.max, ch.position)
+
+        async def reorder(channels):
+            if len(channels) <= 1:
+                return
+            ordered = sorted(channels, key=sort_key)
+            # 新しい→古いの逆順で1つずつ先頭に積むと、結果的に古い→新しい順になる
+            for ch in reversed(ordered):
+                try:
+                    await ch.move(beginning=True, category=category, sync_permissions=False)
+                except discord.HTTPException as e:
+                    print(f"[MonthlyCategory] 再ソート中にエラー（{ch.name}）: {e}")
+
+        await reorder(category.text_channels)
+        await reorder(category.voice_channels)
+
     # ---------------- 位置調整（『セッション１』の真上に配置） ----------------
     async def position_above_reference(self, guild: discord.Guild, category: discord.CategoryChannel):
         ref_id = VC_CHANNEL_IDS.get(REFERENCE_CHANNEL_KEY)
@@ -384,6 +418,33 @@ class MonthlyCategory(commands.Cog):
             await ctx.send("月日を指定してください。例: `!SD 0630`")
         else:
             print(f"[ERROR] set_date: {error}")
+            await ctx.send("エラーが発生しました。")
+
+    # ---------------- 手動コマンド：カテゴリ全体を完全に再ソート ----------------
+    @commands.command(name="RES")
+    @is_gm_or_admin()
+    async def resort(self, ctx):
+        """
+        このチャンネルが所属するカテゴリ全体を、記録済みの開催日に基づいて
+        ゼロから並び替える（GMロール or 管理者のみ）。
+        過去のバージョンで崩れた並びを一括で直したいときに使う。
+        使い方: !RES
+        """
+        category = ctx.channel.category
+        if not is_allowed_category(category):
+            await ctx.send("このチャンネルではこのコマンドは使えません。")
+            return
+
+        await ctx.send(f"🔄 『{category.name}』を再ソートしています…")
+        await self.full_resort_category(category)
+        await ctx.send(f"✅ 『{category.name}』の並び替えが完了しました。")
+
+    @resort.error
+    async def resort_error(self, ctx, error):
+        if isinstance(error, NotGMOrAdmin):
+            await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
+        else:
+            print(f"[ERROR] resort: {error}")
             await ctx.send("エラーが発生しました。")
 
 
