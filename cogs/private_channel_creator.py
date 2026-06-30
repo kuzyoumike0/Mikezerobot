@@ -54,7 +54,7 @@ class PrivateChannelCreator(commands.Cog):
             json.dump(data, f, ensure_ascii=False, indent=4)
 
     # ---------------- チャンネル作成 ----------------
-    @commands.command()
+    @commands.command(aliases=["CC"])
     async def create_private(self, ctx, *, channel_name: str):
         """参加者限定のプライベートチャンネルを作成"""
         guild = ctx.guild
