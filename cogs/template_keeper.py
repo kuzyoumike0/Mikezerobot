@@ -72,22 +72,62 @@ class TemplateKeeper(commands.Cog):
         self.save_data({"msg1_id": msg1.id, "msg2_id": msg2.id})
 
     async def ensure_template(self):
+        """
+        起動時にテンプレートの状態を確認し、必要なら整える。
+        JSONに保存されたIDだけに頼らず、チャンネルの直近メッセージ履歴を
+        直接スキャンしてBot自身が送ったテンプレートを探す（JSONが消えていても安全）。
+        """
         channel = self.bot.get_channel(TEMPLATE_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
             print(f"[TemplateKeeper] チャンネルID {TEMPLATE_CHANNEL_ID} が見つかりません。")
             return
 
-        data = self.load_data()
-        if data.get("msg1_id") and data.get("msg2_id"):
+        # 直近100件からBot自身が送ったMESSAGE_1 / MESSAGE_2を探す
+        found_msg1 = None
+        found_msg2 = None
+        extra_to_delete = []  # 重複して見つかった分はまとめて削除
+
+        async for msg in channel.history(limit=100):
+            if msg.author.id != self.bot.user.id:
+                continue
+            if msg.content == MESSAGE_1:
+                if found_msg1 is None:
+                    found_msg1 = msg
+                else:
+                    extra_to_delete.append(msg)
+            elif msg.content == MESSAGE_2:
+                if found_msg2 is None:
+                    found_msg2 = msg
+                else:
+                    extra_to_delete.append(msg)
+
+        # 重複していた分を削除
+        for msg in extra_to_delete:
             try:
-                await channel.fetch_message(data["msg1_id"])
-                await channel.fetch_message(data["msg2_id"])
-                print("[TemplateKeeper] 既存のテンプレートメッセージを確認しました。")
-                return
-            except (discord.NotFound, discord.HTTPException):
+                await msg.delete()
+            except discord.HTTPException:
+                pass
+        if extra_to_delete:
+            print(f"[TemplateKeeper] 重複テンプレートを{len(extra_to_delete)}件削除しました。")
+
+        if found_msg1 and found_msg2:
+            # 既存のテンプレートが見つかった → IDをJSONに同期して終了（再送信しない）
+            self.save_data({"msg1_id": found_msg1.id, "msg2_id": found_msg2.id})
+            print("[TemplateKeeper] 既存のテンプレートメッセージを確認しました。")
+            return
+
+        # 片方しか無い／両方無い場合は、残骸を消してから新規送信
+        if found_msg1:
+            try:
+                await found_msg1.delete()
+            except discord.HTTPException:
+                pass
+        if found_msg2:
+            try:
+                await found_msg2.delete()
+            except discord.HTTPException:
                 pass
 
-        await self.delete_old_template(channel)
         await self.send_template(channel)
         print("[TemplateKeeper] テンプレートメッセージを送信しました。")
 
