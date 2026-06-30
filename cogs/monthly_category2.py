@@ -3,7 +3,6 @@ from discord.ext import commands, tasks
 import json
 import os
 import re
-import asyncio
 import datetime
 from zoneinfo import ZoneInfo
 
@@ -18,11 +17,8 @@ MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
 # 自動作成は「何ヶ月先」のカテゴリを作るか（例: 3なら7月に11月分を作る）
 MONTHS_AHEAD = 3
 
-# !m2m2 を使えるロール名（これ or 管理者のみ）
+# !m2m を使えるロール名（これ or 管理者のみ）
 GM_ROLE_NAME = "GM"
-
-# 卓ログを送るチャンネルID
-LOG_CHANNEL_ID = 1518542529589415956
 
 # このコグが作るカテゴリ名（「2026年7月」など）にマッチする正規表現
 MONTHLY_CATEGORY_NAME_PATTERN = re.compile(r"^\d+年\d+月$")
@@ -34,19 +30,6 @@ EVENT_MONTH_CATEGORY_NAME_PATTERN = re.compile(r"^\d+月開催卓?$")
 def get_category_name(target_date: datetime.date) -> str:
     """対象の年月から「2026年7月」形式のカテゴリ名を作る"""
     return f"{target_date.year}年{target_date.month}月"
-
-
-def parse_time(time_str: str) -> tuple[int, int]:
-    """
-    時分文字列を (hour, minute) に変換する。
-    3桁: 930  → (9, 30)
-    4桁: 1800 → (18, 0)
-    """
-    if len(time_str) == 3:
-        return int(time_str[0]), int(time_str[1:3])
-    elif len(time_str) == 4:
-        return int(time_str[0:2]), int(time_str[2:4])
-    raise ValueError("時分は3〜4桁で入力してください。例: 930 または 1800")
 
 
 def add_months(base_date: datetime.date, months: int) -> datetime.date:
@@ -72,7 +55,7 @@ def is_gm_or_admin():
 
 
 def is_allowed_category(category: discord.CategoryChannel) -> bool:
-    """m2m2を使ってよいチャンネルかどうか
+    """m2mを使ってよいチャンネルかどうか
     （卓用ch作成カテゴリ1 / 月別カテゴリ / ○月開催卓カテゴリ 配下のみ）"""
     if category is None:
         return False
@@ -92,7 +75,6 @@ class MonthlyCategory(commands.Cog):
 
     def __init__(self, bot):
         self.bot = bot
-        self._pending_reminders: list[asyncio.Task] = []
 
     async def cog_load(self):
         self.monthly_category_task.start()
@@ -258,127 +240,27 @@ class MonthlyCategory(commands.Cog):
             target_date = add_months(now.date(), MONTHS_AHEAD)
             await self.create_monthly_category(guild, target_date)
 
-    # ---------------- 手動コマンド ----------------
-    @commands.command(name="createmonthlycategory")
-    @commands.has_permissions(administrator=True)
-    async def createmonthlycategory(self, ctx, year: int = None, month: int = None):
-        """
-        手動で月別カテゴリを作成するコマンド（管理者のみ）。
-        使い方:
-          !createmonthlycategory          → 今月のカテゴリを作成
-          !createmonthlycategory 2026 8   → 2026年8月のカテゴリを作成
-        """
-        now = datetime.datetime.now(JST)
-
-        if year is None or month is None:
-            target_date = now.date()
-        else:
-            try:
-                target_date = datetime.date(year, month, 1)
-            except ValueError:
-                await ctx.send("年月の指定が正しくありません。例: `!createmonthlycategory 2026 8`")
-                return
-
-        category, created = await self.create_monthly_category(ctx.guild, target_date)
-
-        data = self.load_data()
-        data["last_created"] = self._month_key(target_date)
-        self.save_data(data)
-
-        if created:
-            await ctx.send(f"✅ カテゴリ『{category.name}』を作成しました。")
-        else:
-            await ctx.send(f"ℹ️ カテゴリ『{category.name}』は既に存在します。")
-
-    @createmonthlycategory.error
-    async def createmonthlycategory_error(self, ctx, error):
-        if isinstance(error, commands.MissingPermissions):
-            await ctx.send("このコマンドは管理者のみ使用できます。")
-        elif isinstance(error, commands.BadArgument):
-            await ctx.send("年月の指定が正しくありません。例: `!createmonthlycategory 2026 8`")
-        else:
-            print(f"[ERROR] createmonthlycategory: {error}")
-            await ctx.send("エラーが発生しました。")
-
-    # ---------------- 卓ログ送信 ----------------
-    async def send_session_log(
-        self,
-        guild: discord.Guild,
-        channel: discord.TextChannel,
-        session_dt: datetime.datetime,
-        mentions: list[str],
-    ):
-        log_channel = guild.get_channel(LOG_CHANNEL_ID)
-        if log_channel is None:
-            print(f"[MonthlyCategory] ログチャンネル（ID: {LOG_CHANNEL_ID}）が見つかりません。")
-            return
-        members_str = " ".join(mentions) if mentions else "（なし）"
-        embed = discord.Embed(
-            title="📋 卓ログ",
-            color=discord.Color.blue(),
-        )
-        embed.add_field(name="📅 開催日時", value=session_dt.strftime("%Y年%m月%d日 %H:%M"), inline=False)
-        embed.add_field(name="📺 チャンネル", value=channel.mention, inline=False)
-        embed.add_field(name="👥 参加者", value=members_str, inline=False)
-        await log_channel.send(embed=embed)
-
-    # ---------------- サイレントリマインド送信 ----------------
-    async def _reminder_task(
-        self,
-        channel: discord.TextChannel,
-        session_dt: datetime.datetime,
-        mentions: list[str],
-        label: str,
-        wait_seconds: float,
-    ):
-        await asyncio.sleep(wait_seconds)
-        mention_str = " ".join(mentions)
-        try:
-            await channel.send(
-                f"🔔 {mention_str}\n"
-                f"📅 {label}（{session_dt.strftime('%m月%d日 %H:%M')}）に卓があります！",
-                suppress_notifications=True,
-            )
-        except Exception as e:
-            print(f"[MonthlyCategory] リマインド送信失敗（{label}）: {e}")
-
-    def _schedule_reminder(self, channel, session_dt, mentions, remind_dt, label, now):
-        """リマインドをスケジュールし、登録できた場合は remind_dt を返す。過去なら None を返す。"""
-        wait_seconds = (remind_dt - now).total_seconds()
-        if wait_seconds <= 0:
-            return None
-        task = asyncio.create_task(
-            self._reminder_task(channel, session_dt, mentions, label, wait_seconds)
-        )
-        self._pending_reminders.append(task)
-        task.add_done_callback(
-            lambda t: self._pending_reminders.remove(t) if t in self._pending_reminders else None
-        )
-        return remind_dt
-
-    # ---------------- 手動コマンド：シンプル移動（!m2m 月/日） ----------------
+    # ---------------- 手動コマンド：シンプル移動（!m2m 月日） ----------------
     @commands.command(name="m2m")
     @is_gm_or_admin()
     async def m2m(self, ctx, date_str: str):
         """
-        コマンドを打ったチャンネルを指定した月のカテゴリへ移動する（GMロール or 管理者のみ）。
-        時刻・メンション不要のシンプル版。ログ・通知なし。
-        使い方: !m2m 7/15
+        コマンドを打ったチャンネルを指定した月日のカテゴリへ移動する（GMロール or 管理者のみ）。
+        入力は「月日」4桁（例: 0630 → 6月30日）。
+        移動と同時に開催日を記録し、その記録を基にカテゴリ内を並び替える。
+        使い方: !m2m 0630
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
             return
 
-        parts = date_str.split("/")
-        if len(parts) != 2:
-            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
+        s = date_str.strip()
+        if len(s) != 4 or not s.isdigit():
+            await ctx.send("入力形式が正しくありません。例: `!m2m 0630`（6月30日）")
             return
 
-        try:
-            month, day = int(parts[0]), int(parts[1])
-        except ValueError:
-            await ctx.send("入力形式が正しくありません。例: `!m2m 7/15`")
-            return
+        month = int(s[0:2])
+        day = int(s[2:4])
 
         now = datetime.datetime.now(JST)
         year = now.year if month >= now.month else now.year + 1
@@ -408,112 +290,68 @@ class MonthlyCategory(commands.Cog):
 
         self.save_channel_date(ctx.channel.id, target_date)
         await self.sort_category_by_date(category)
-        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動し、開催日順に並び替えました。")
+        await ctx.send(
+            f"✅ このチャンネルを『{category_name}』に移動し、"
+            f"開催日（{target_date.strftime('%Y年%m月%d日')}）を記録して並び替えました。"
+        )
 
     @m2m.error
     async def m2m_error(self, ctx, error):
         if isinstance(error, NotGMOrAdmin):
             await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("月/日を指定してください。例: `!m2m 7/15`")
+            await ctx.send("月日を指定してください。例: `!m2m 0630`")
         else:
             print(f"[ERROR] m2m: {error}")
             await ctx.send("エラーが発生しました。")
 
-    # ---------------- 手動コマンド：拡張移動（!m2m2 月/日/時分 @mentions） ----------------
-    @commands.command(name="m2m2")
+    # ---------------- 手動コマンド：移動せず開催日だけ登録 ----------------
+    @commands.command(name="SD")
     @is_gm_or_admin()
-    async def m2m2(self, ctx, date_str: str, *members: discord.Member):
+    async def set_date(self, ctx, date_str: str):
         """
-        チャンネル移動 + ログ記録 + 1日前・1時間前にサイレント通知（GMロール or 管理者のみ）。
-        使い方:
-          !m2m2 7/15/1800              → 7月15日18時のカテゴリへ移動
-          !m2m2 7/15/1800 @user1 @user2 → 上記 + ログ記録 & 1日前・1時間前にサイレント通知
+        カテゴリ移動はせず、このチャンネルに開催日だけ登録してカテゴリ内を並び替える
+        （GMロール or 管理者のみ）。
+        既にカテゴリ内にいるが日付が未登録のチャンネルに後付けで使う。
+        入力は「月日」4桁（例: 0630 → 6月30日）。
+        使い方: !SD 0630
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
             return
 
-        # ── 日付・時刻パース ──
-        parts = date_str.split("/")
-        if len(parts) != 3:
-            await ctx.send("入力形式が正しくありません。例: `!m2m2 7/15/1800`")
+        s = date_str.strip()
+        if len(s) != 4 or not s.isdigit():
+            await ctx.send("入力形式が正しくありません。例: `!SD 0630`（6月30日）")
             return
 
-        try:
-            month = int(parts[0])
-            day   = int(parts[1])
-            hour, minute = parse_time(parts[2])
-        except ValueError as e:
-            await ctx.send(f"入力形式が正しくありません: {e}\n例: `!m2m2 7/15/1800`")
-            return
+        month = int(s[0:2])
+        day = int(s[2:4])
 
         now = datetime.datetime.now(JST)
         year = now.year if month >= now.month else now.year + 1
 
         try:
-            session_dt = datetime.datetime(year, month, day, hour, minute, tzinfo=JST)
+            target_date = datetime.date(year, month, day)
         except ValueError:
-            await ctx.send("存在しない日付・時刻です。確認してください。")
+            await ctx.send("存在しない日付です。確認してください。")
             return
 
-        # ── カテゴリ移動 ──
-        category_name = get_category_name(session_dt.date())
-        category = discord.utils.get(ctx.guild.categories, name=category_name)
-
-        if category is None:
-            await ctx.send(
-                f"カテゴリ『{category_name}』が見つかりません。"
-                f"先に `!createmonthlycategory {year} {month}` で作成してください。"
-            )
-            return
-
-        try:
-            await ctx.channel.edit(category=category, sync_permissions=False)
-        except discord.HTTPException as e:
-            print(f"[ERROR] m2m2: {e}")
-            await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
-            return
-
-        self.save_channel_date(ctx.channel.id, session_dt.date())
-        await self.sort_category_by_date(category)
-
+        self.save_channel_date(ctx.channel.id, target_date)
+        await self.sort_category_by_date(ctx.channel.category)
         await ctx.send(
-            f"✅ このチャンネルを『{category_name}』に移動し、開催日順に並び替えました。\n"
-            f"📅 開催日時: {session_dt.strftime('%Y年%m月%d日 %H:%M')}"
+            f"✅ このチャンネルの開催日を {target_date.strftime('%Y年%m月%d日')} に登録し、"
+            f"カテゴリ内を並び替えました。"
         )
 
-        if not members:
-            return
-
-        mentions = [m.mention for m in members]
-
-        # ログ送信
-        await self.send_session_log(ctx.guild, ctx.channel, session_dt, mentions)
-
-        # ── 1日前・1時間前のサイレントリマインドをスケジュール ──
-        remind_1day  = session_dt - datetime.timedelta(days=1)
-        remind_1hour = session_dt - datetime.timedelta(hours=1)
-
-        scheduled = []
-        if self._schedule_reminder(ctx.channel, session_dt, mentions, remind_1day, "1日後", now):
-            scheduled.append(f"📬 1日前: {remind_1day.strftime('%m月%d日 %H:%M')}")
-        if self._schedule_reminder(ctx.channel, session_dt, mentions, remind_1hour, "1時間後", now):
-            scheduled.append(f"📬 1時間前: {remind_1hour.strftime('%m月%d日 %H:%M')}")
-
-        if scheduled:
-            await ctx.send("⏰ サイレント通知を登録しました。\n" + "\n".join(scheduled))
-        else:
-            await ctx.send("⚠️ 通知タイミングがすでに過ぎているため登録しませんでした。")
-
-    @m2m2.error
-    async def m2m2_error(self, ctx, error):
+    @set_date.error
+    async def set_date_error(self, ctx, error):
         if isinstance(error, NotGMOrAdmin):
             await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("日時を指定してください。例: `!m2m2 7/15/1800`")
+            await ctx.send("月日を指定してください。例: `!SD 0630`")
         else:
-            print(f"[ERROR] m2m2: {error}")
+            print(f"[ERROR] set_date: {error}")
             await ctx.send("エラーが発生しました。")
 
 
