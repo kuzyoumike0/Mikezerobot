@@ -1,6 +1,22 @@
 import discord
 from discord.ext import commands
 
+GM_ROLE_NAME = "GM"
+
+
+class NotGMOrAdmin(commands.CheckFailure):
+    pass
+
+
+def is_gm_or_admin():
+    async def predicate(ctx: commands.Context) -> bool:
+        if ctx.author.guild_permissions.administrator:
+            return True
+        if discord.utils.get(ctx.author.roles, name=GM_ROLE_NAME):
+            return True
+        raise NotGMOrAdmin("GMロールまたは管理者のみ使用できます。")
+    return commands.check(predicate)
+
 
 class CogLauncherView(discord.ui.View):
     """1ボタン＝1cogを起動するための永続View。
@@ -63,9 +79,12 @@ class CogLauncherView(discord.ui.View):
         custom_id="cog_launcher:delete_channel",
     )
     async def delete_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        if not interaction.user.guild_permissions.manage_channels:
+        has_manage_channels = interaction.user.guild_permissions.manage_channels
+        has_gm_role = discord.utils.get(interaction.user.roles, name=GM_ROLE_NAME) is not None
+
+        if not (has_manage_channels or has_gm_role):
             await interaction.response.send_message(
-                "❌ このボタンは「チャンネルの管理」権限を持つ人のみ使用できます。",
+                "❌ このボタンは「チャンネルの管理」権限を持つ人、またはGMロールの人のみ使用できます。",
                 ephemeral=True,
             )
             return
@@ -94,16 +113,21 @@ class CogLauncher(commands.Cog):
         # Bot再起動後もボタンを押せるように、永続Viewとして登録しておく
         self.bot.add_view(CogLauncherView(bot))
 
-    @commands.command(name="launcher")
-    @commands.has_permissions(administrator=True)
-    async def launcher(self, ctx: commands.Context):
-        """cog起動ボタンのパネルを設置する（管理者のみ）"""
+    @commands.command(name="call")
+    @is_gm_or_admin()
+    async def call(self, ctx: commands.Context):
+        """cog起動ボタンのパネルを設置する（管理者 or GMロールのみ）"""
         embed = discord.Embed(
             title="🚀 機能起動パネル",
             description="ボタンを押すと、対応するcogの機能が起動します。",
             color=discord.Color.gold(),
         )
         await ctx.send(embed=embed, view=CogLauncherView(self.bot))
+
+    @call.error
+    async def call_error(self, ctx: commands.Context, error: commands.CommandError):
+        if isinstance(error, NotGMOrAdmin):
+            await ctx.send("❌ このコマンドは管理者またはGMロールのみ使用できます。")
 
 
 async def setup(bot: commands.Bot):
