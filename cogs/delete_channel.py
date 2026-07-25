@@ -10,6 +10,15 @@ def launcher_only():
     return commands.check(predicate)
 
 
+async def reply(ctx: commands.Context, content: str):
+    """launcher経由なら実行者本人にしか見えないephemeralで返す。"""
+    interaction = getattr(ctx, "interaction", None)
+    if interaction is not None:
+        await interaction.followup.send(content, ephemeral=True)
+    else:
+        await ctx.send(content)
+
+
 class DeleteChannel(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -22,14 +31,14 @@ class DeleteChannel(commands.Cog):
         channel = ctx.channel
 
         if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
-            await ctx.send("❌ このチャンネルは削除できません。")
+            await reply(ctx, "❌ このチャンネルは削除できません。")
             return
 
         if channel.category_id not in DELETE_ALLOWED_CATEGORY_IDS:
-            await ctx.send("❌ このチャンネルは削除対象のカテゴリに含まれていないため削除できません。")
+            await reply(ctx, "❌ このチャンネルは削除対象のカテゴリに含まれていないため削除できません。")
             return
 
-        await ctx.send(f"🗑️ 「{channel.name}」を削除します...")
+        await reply(ctx, f"🗑️ 「{channel.name}」を削除します...")
         await channel.delete(reason=f"{ctx.author} がチャンネル削除ボタン経由で !delete を実行")
 
 

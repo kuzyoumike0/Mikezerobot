@@ -9,6 +9,15 @@ def launcher_only():
     return commands.check(predicate)
 
 
+async def reply(ctx: commands.Context, content: str, **kwargs):
+    """launcher経由なら実行者本人にしか見えないephemeralで返す。"""
+    interaction = getattr(ctx, "interaction", None)
+    if interaction is not None:
+        await interaction.followup.send(content, ephemeral=True, **kwargs)
+    else:
+        await ctx.send(content, **kwargs)
+
+
 class InviteUserSelect(discord.ui.UserSelect):
     def __init__(self, channel: discord.abc.GuildChannel):
         super().__init__(placeholder="招待するユーザーを選択", min_values=1, max_values=5)
@@ -38,14 +47,13 @@ class InviteToChannel(commands.Cog):
     @commands.command(name="in", hidden=True)
     @launcher_only()
     async def invite(self, ctx: commands.Context):
-        """実行したチャンネルに招待するユーザーをディスプレイ上で選択する（例: !in）"""
         channel = ctx.channel
 
         if not isinstance(channel, (discord.TextChannel, discord.VoiceChannel)):
-            await ctx.send("❌ このチャンネルには招待できません。")
+            await reply(ctx, "❌ このチャンネルには招待できません。")
             return
 
-        await ctx.send("招待するユーザーを選んでください。", view=InviteView(channel))
+        await reply(ctx, "招待するユーザーを選んでください。", view=InviteView(channel))
 
 
 async def setup(bot: commands.Bot):

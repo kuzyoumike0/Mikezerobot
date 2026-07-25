@@ -1,21 +1,8 @@
 import discord
+from discord import app_commands
 from discord.ext import commands
 
 GM_ROLE_NAME = "GM"
-
-
-class NotGMOrAdmin(commands.CheckFailure):
-    pass
-
-
-def is_gm_or_admin():
-    async def predicate(ctx: commands.Context) -> bool:
-        if ctx.author.guild_permissions.administrator:
-            return True
-        if discord.utils.get(ctx.author.roles, name=GM_ROLE_NAME):
-            return True
-        raise NotGMOrAdmin("GMロールまたは管理者のみ使用できます。")
-    return commands.check(predicate)
 
 
 class CogLauncherView(discord.ui.View):
@@ -97,12 +84,13 @@ class CogLauncherView(discord.ui.View):
             )
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
-        # !delete コマンドをボタン経由で起動する（ctx.author を押した人に差し替える）
+        # !delete コマンドをボタン経由で起動する（本人にしか見えないよう interaction を渡す）
         ctx = await self.bot.get_context(interaction.message)
         ctx.author = interaction.user
         ctx.from_launcher = True
+        ctx.interaction = interaction
         await ctx.invoke(delete_command)
     # ==========================================================
 
@@ -133,12 +121,13 @@ class CogLauncherView(discord.ui.View):
             )
             return
 
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
-        # !in コマンドをボタン経由で起動する（ctx.author を押した人に差し替える）
+        # !in コマンドをボタン経由で起動する（本人にしか見えないよう interaction を渡す）
         ctx = await self.bot.get_context(interaction.message)
         ctx.author = interaction.user
         ctx.from_launcher = True
+        ctx.interaction = interaction
         await ctx.invoke(invite_command)
     # ==========================================================
 
@@ -149,21 +138,24 @@ class CogLauncher(commands.Cog):
         # Bot再起動後もボタンを押せるように、永続Viewとして登録しておく
         self.bot.add_view(CogLauncherView(bot))
 
-    @commands.command(name="call")
-    @is_gm_or_admin()
-    async def call(self, ctx: commands.Context):
-        """cog起動ボタンのパネルを設置する（管理者 or GMロールのみ）"""
+    @app_commands.command(name="call", description="機能起動パネルを表示（管理者・GMロール限定・本人のみ表示）")
+    async def call(self, interaction: discord.Interaction):
+        is_admin = interaction.user.guild_permissions.administrator
+        has_gm_role = discord.utils.get(interaction.user.roles, name=GM_ROLE_NAME) is not None
+
+        if not (is_admin or has_gm_role):
+            await interaction.response.send_message(
+                "❌ このコマンドは管理者またはGMロールのみ使用できます。",
+                ephemeral=True,
+            )
+            return
+
         embed = discord.Embed(
             title="🚀 機能起動パネル",
             description="ボタンを押すと、対応するcogの機能が起動します。",
             color=discord.Color.gold(),
         )
-        await ctx.send(embed=embed, view=CogLauncherView(self.bot))
-
-    @call.error
-    async def call_error(self, ctx: commands.Context, error: commands.CommandError):
-        if isinstance(error, NotGMOrAdmin):
-            await ctx.send("❌ このコマンドは管理者またはGMロールのみ使用できます。")
+        await interaction.response.send_message(embed=embed, view=CogLauncherView(self.bot), ephemeral=True)
 
 
 async def setup(bot: commands.Bot):
