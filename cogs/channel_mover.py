@@ -6,7 +6,7 @@ import re
 import datetime
 from zoneinfo import ZoneInfo
 
-from config import CATEGORY_ID
+from config import CATEGORY_ID, AUDIT_LOG_CHANNEL_ID
 
 JST = ZoneInfo("Asia/Tokyo")
 MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
@@ -81,6 +81,7 @@ class ChannelMover(commands.Cog):
     async def full_resort_category(self, category: discord.CategoryChannel):
         data = self.load_data()
         channel_dates = data.get("channel_dates", {})
+        failed_channels = []
 
         def sort_key(ch):
             date_str = channel_dates.get(str(ch.id))
@@ -100,9 +101,36 @@ class ChannelMover(commands.Cog):
                     await ch.move(beginning=True, category=category, sync_permissions=False)
                 except discord.HTTPException as e:
                     print(f"[ChannelMover] 再ソート中にエラー（{ch.name}）: {e}")
+                    failed_channels.append((ch.name, str(e)))
 
         await reorder(category.text_channels)
         await reorder(category.voice_channels)
+
+        if failed_channels:
+            await self.send_sort_failure_log(category, failed_channels)
+
+    async def send_sort_failure_log(self, category: discord.CategoryChannel, failed_channels: list):
+        log_channel = category.guild.get_channel(AUDIT_LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        embed = discord.Embed(
+            title="⚠️ チャンネル並び替え失敗ログ",
+            description=f"カテゴリ『{category.name}』でソートできなかったチャンネルがあります。",
+            color=discord.Color.orange(),
+        )
+        embed.add_field(
+            name="対象チャンネル",
+            value="\n".join(f"- {name}: {error}" for name, error in failed_channels),
+            inline=False,
+        )
+        embed.add_field(name="日時", value=now, inline=False)
+
+        try:
+            await log_channel.send(embed=embed)
+        except discord.Forbidden:
+            pass
 
     # ---------------- !m2m ----------------
     @commands.command(name="m2m")
