@@ -4,6 +4,7 @@ import asyncio
 import os
 import logging
 from dotenv import load_dotenv
+from config import GUILD_ID
 
 # --- .envファイルから環境変数をロード ---
 load_dotenv()
@@ -54,6 +55,13 @@ async def load_all_cogs():
 @bot.event
 async def on_ready():
     logger.info(f"✅ Bot起動完了: {bot.user} (ID: {bot.user.id})")
+    try:
+        guild = discord.Object(id=GUILD_ID)
+        bot.tree.copy_global_to(guild=guild)
+        synced = await bot.tree.sync(guild=guild)
+        logger.info(f"✅ スラッシュコマンドを同期しました: {len(synced)}件")
+    except Exception:
+        logger.exception("❌ スラッシュコマンドの同期に失敗しました。")
 
 
 # --- コマンドエラー処理 ---
