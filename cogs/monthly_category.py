@@ -108,6 +108,9 @@ class MonthlyCategoryCreator(commands.Cog):
         if data.get("last_created") == month_key:
             return
         category, created = await self.create_monthly_category(guild, target_date)
+        # await の間に !m2m 等が channel_dates を更新している可能性があるため、
+        # 保存直前に最新のデータを読み直してから last_created だけを更新する。
+        data = self.load_data()
         data["last_created"] = month_key
         self.save_data(data)
         if created:
