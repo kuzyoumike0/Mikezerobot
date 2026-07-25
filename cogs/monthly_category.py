@@ -26,7 +26,7 @@ def add_months(base_date: datetime.date, months: int) -> datetime.date:
 
 class MonthlyCategoryCreator(commands.Cog):
     """毎月1日に自動で『MONTHS_AHEADヶ月先』の『○年○月』カテゴリを新設するコグ。
-    !createmonthlycategory コマンドで任意の年月を手動作成することも可能。
+    !CMC コマンドで任意の年月を手動作成することも可能。
     """
 
     def __init__(self, bot):
@@ -117,14 +117,14 @@ class MonthlyCategoryCreator(commands.Cog):
             await self.create_monthly_category(guild, target_date)
 
     # ---------------- 手動コマンド ----------------
-    @commands.command(name="createmonthlycategory")
+    @commands.command(name="CMC")
     @commands.has_permissions(administrator=True)
     async def createmonthlycategory(self, ctx, year: int = None, month: int = None):
         """
         手動で月別カテゴリを作成する（管理者のみ）。
         使い方:
-          !createmonthlycategory          → 今月のカテゴリを作成
-          !createmonthlycategory 2026 8   → 2026年8月のカテゴリを作成
+          !CMC          → 今月のカテゴリを作成
+          !CMC 2026 8   → 2026年8月のカテゴリを作成
         """
         now = datetime.datetime.now(JST)
         if year is None or month is None:
@@ -133,7 +133,7 @@ class MonthlyCategoryCreator(commands.Cog):
             try:
                 target_date = datetime.date(year, month, 1)
             except ValueError:
-                await ctx.send("年月の指定が正しくありません。例: `!createmonthlycategory 2026 8`")
+                await ctx.send("年月の指定が正しくありません。例: `!CMC 2026 8`")
                 return
 
         category, created = await self.create_monthly_category(ctx.guild, target_date)
@@ -151,7 +151,7 @@ class MonthlyCategoryCreator(commands.Cog):
         if isinstance(error, commands.MissingPermissions):
             await ctx.send("このコマンドは管理者のみ使用できます。")
         elif isinstance(error, commands.BadArgument):
-            await ctx.send("年月の指定が正しくありません。例: `!createmonthlycategory 2026 8`")
+            await ctx.send("年月の指定が正しくありません。例: `!CMC 2026 8`")
         else:
             print(f"[ERROR] createmonthlycategory: {error}")
             await ctx.send("エラーが発生しました。")
