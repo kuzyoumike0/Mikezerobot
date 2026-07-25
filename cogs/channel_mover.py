@@ -191,12 +191,12 @@ class ChannelMover(commands.Cog):
                 await ctx.send(f"カテゴリが見つかりません（ID: {CATEGORY_ID}）。")
                 return
             try:
-                await ctx.channel.edit(category=category, sync_permissions=False)
+                await ctx.channel.move(end=True, category=category, sync_permissions=False)
             except discord.HTTPException as e:
                 print(f"[ERROR] m2m r: {e}")
                 await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
                 return
-            await ctx.send(f"✅ このチャンネルを『{category.name}』に移動しました。")
+            await ctx.send(f"✅ このチャンネルを『{category.name}』の一番下に移動しました。")
             return
 
         if len(s) != 4 or not s.isdigit():
