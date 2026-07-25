@@ -10,7 +10,7 @@ from config import GUILD_ID, VC_CHANNEL_IDS
 REFERENCE_CHANNEL_KEY = "セッション１"
 JST = ZoneInfo("Asia/Tokyo")
 MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
-MONTHS_AHEAD = 3
+MONTHS_AHEAD = 4
 
 
 def get_category_name(target_date: datetime.date) -> str:
