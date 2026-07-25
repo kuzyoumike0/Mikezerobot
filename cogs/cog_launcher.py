@@ -37,7 +37,7 @@ class CogLauncherView(discord.ui.View):
                 ephemeral=True,
             )
             return
-            
+
         # ▼▼▼ ここに新規cogsの起動コードを書く ▼▼▼
 
         # 例1: 起動したいcog側に専用メソッド（例: start）を用意して呼び出す
@@ -53,6 +53,41 @@ class CogLauncherView(discord.ui.View):
     # ==========================================================
     # 🔼 テンプレートここまで
     # ==========================================================
+
+    # ==========================================================
+    # チャンネル削除ボタン（!delete は直接打っても実行不可。このボタンからのみ !delete を起動する）
+    # ==========================================================
+    @discord.ui.button(
+        label="チャンネル削除",
+        style=discord.ButtonStyle.danger,
+        custom_id="cog_launcher:delete_channel",
+    )
+    async def delete_channel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if not interaction.user.guild_permissions.manage_channels:
+            await interaction.response.send_message(
+                "❌ このボタンは「チャンネルの管理」権限を持つ人のみ使用できます。",
+                ephemeral=True,
+            )
+            return
+
+        delete_command = self.bot.get_command("delete")
+        if delete_command is None:
+            await interaction.response.send_message(
+                "❌ delete コマンドが読み込まれていません（cogs/delete_channel.py を確認してください）。",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+
+        # !delete コマンドをボタン経由で起動する（ctx.author を押した人に差し替える）
+        ctx = await self.bot.get_context(interaction.message)
+        ctx.author = interaction.user
+        ctx.from_launcher = True
+        await ctx.invoke(delete_command)
+    # ==========================================================
+
+
 class CogLauncher(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
