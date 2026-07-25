@@ -18,41 +18,37 @@ class CogLauncherView(discord.ui.View):
         self.bot = bot
 
     # ==========================================================
-    # 🔽 テンプレート：ここから1ブロック＝1つのcog起動ボタン
+    # 🔽 テンプレート（コメントのみ・非稼働）：新しいボタンを増やすときはここを参考に
     #
     # 複製する手順:
-    #   1. このブロック全体（@discord.ui.button 〜 メソッド終わりまで）をコピー
+    #   1. 下のコメントをコピーして @discord.ui.button 〜 メソッド終わりまでを実コードにする
     #   2. label と custom_id を新しい名前に変更（custom_id は必ずボタンごとに一意）
-    #   3. メソッド名 (launch_sample_cog) を分かりやすい名前に変更
+    #   3. メソッド名を分かりやすい名前に変更
     #   4. get_cog("SampleCog") の文字列を、起動したいCogのクラス名に変更
     #   5. 「ここに新規cogsの起動コードを書く」の中身を実装
-    # ==========================================================
-    @discord.ui.button(
-        label="サンプルCog起動",
-        style=discord.ButtonStyle.primary,
-        custom_id="cog_launcher:sample_cog",
-    )
-    async def launch_sample_cog(self, interaction: discord.Interaction, button: discord.ui.Button):
-        target_cog = self.bot.get_cog("SampleCog")  # ← 起動したいCogのクラス名に変更
-        if target_cog is None:
-            await interaction.response.send_message(
-                "❌ SampleCog が見つかりません。cogsフォルダに追加されているか確認してください。",
-                ephemeral=True,
-            )
-            return
-
-        # ▼▼▼ ここに新規cogsの起動コードを書く ▼▼▼
-
-        # 例1: 起動したいcog側に専用メソッド（例: start）を用意して呼び出す
-        # await target_cog.start(interaction)
-
-        # 例2: cogが持っている!コマンドをそのまま実行する
-        # ctx = await self.bot.get_context(interaction.message)
-        # await target_cog.some_command(ctx)
-
-        # ▲▲▲ ここまで ▲▲▲
-
-        await interaction.response.send_message("✅ SampleCog を起動しました！", ephemeral=True)
+    #
+    # @discord.ui.button(
+    #     label="サンプルCog起動",
+    #     style=discord.ButtonStyle.primary,
+    #     custom_id="cog_launcher:sample_cog",
+    # )
+    # async def launch_sample_cog(self, interaction: discord.Interaction, button: discord.ui.Button):
+    #     target_cog = self.bot.get_cog("SampleCog")  # ← 起動したいCogのクラス名に変更
+    #     if target_cog is None:
+    #         await interaction.response.send_message(
+    #             "❌ SampleCog が見つかりません。cogsフォルダに追加されているか確認してください。",
+    #             ephemeral=True,
+    #         )
+    #         return
+    #
+    #     # 例1: 起動したいcog側に専用メソッド（例: start）を用意して呼び出す
+    #     # await target_cog.start(interaction)
+    #
+    #     # 例2: cogが持っている!コマンドをそのまま実行する
+    #     # ctx = await self.bot.get_context(interaction.message)
+    #     # await target_cog.some_command(ctx)
+    #
+    #     await interaction.response.send_message("✅ SampleCog を起動しました！", ephemeral=True)
     # ==========================================================
     # 🔼 テンプレートここまで
     # ==========================================================
