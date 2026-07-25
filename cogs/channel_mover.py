@@ -165,10 +165,7 @@ class ChannelMover(commands.Cog):
 
         self.save_channel_date(ctx.channel.id, target_date)
         await self.full_resort_category(category)
-        await ctx.send(
-            f"✅ このチャンネルを『{category_name}』に移動し、"
-            f"開催日（{target_date.strftime('%Y年%m月%d日')}）を記録して並び替えました。"
-        )
+        await ctx.send(f"✅ このチャンネルを『{category_name}』に移動しました。")
 
     @m2m.error
     async def m2m_error(self, ctx, error):
