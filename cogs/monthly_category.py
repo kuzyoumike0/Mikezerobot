@@ -2,16 +2,18 @@ import discord
 from discord.ext import commands, tasks
 import json
 import os
+import re
 import datetime
 from zoneinfo import ZoneInfo
 
-from config import GUILD_ID, VC_CHANNEL_IDS
-from cogs.delete_channel import add_dynamic_allowed_category_id
+from config import GUILD_ID, VC_CHANNEL_IDS, AUDIT_LOG_CHANNEL_ID
+from cogs.delete_channel import add_dynamic_allowed_category_id, remove_dynamic_allowed_category_id
 
 REFERENCE_CHANNEL_KEY = "セッション１"
 JST = ZoneInfo("Asia/Tokyo")
 MONTHLY_CATEGORY_DATA_PATH = "data/monthly_category.json"
 MONTHS_AHEAD = 3
+MONTHLY_CATEGORY_NAME_PATTERN = re.compile(r"^(\d+)年(\d+)月$")
 
 
 def get_category_name(target_date: datetime.date) -> str:
@@ -35,10 +37,12 @@ class MonthlyCategoryCreator(commands.Cog):
 
     async def cog_load(self):
         self.monthly_category_task.start()
+        self.monthly_category_cleanup_task.start()
         print("[MonthlyCategoryCreator] Cog initialized. 自動タスクを開始しました。")
 
     def cog_unload(self):
         self.monthly_category_task.cancel()
+        self.monthly_category_cleanup_task.cancel()
 
     # ---------------- 永続化 ----------------
     def load_data(self) -> dict:
@@ -117,6 +121,75 @@ class MonthlyCategoryCreator(commands.Cog):
             now = datetime.datetime.now(JST)
             target_date = add_months(now.date(), MONTHS_AHEAD)
             await self.create_monthly_category(guild, target_date)
+
+    # ---------------- 自動削除タスク（月初めに一回、当月を過ぎた月別カテゴリを中身ごと削除） ----------------
+    @tasks.loop(time=datetime.time(hour=0, minute=15, tzinfo=JST))
+    async def monthly_category_cleanup_task(self):
+        now = datetime.datetime.now(JST)
+        if now.day != 1:
+            return
+        guild = self.bot.get_guild(GUILD_ID)
+        if guild is None:
+            print("[MonthlyCategoryCreator] GUILD_IDのサーバーが見つかりません。")
+            return
+        await self.cleanup_past_categories(guild)
+
+    @monthly_category_cleanup_task.before_loop
+    async def before_monthly_category_cleanup_task(self):
+        await self.bot.wait_until_ready()
+
+    async def cleanup_past_categories(self, guild: discord.Guild):
+        now = datetime.datetime.now(JST).date()
+
+        for category in list(guild.categories):
+            match = MONTHLY_CATEGORY_NAME_PATTERN.match(category.name)
+            if not match:
+                continue
+
+            year, month = int(match.group(1)), int(match.group(2))
+            if (year, month) >= (now.year, now.month):
+                continue  # まだ当月を過ぎていない
+
+            deleted_channel_names = []
+            for channel in list(category.channels):
+                try:
+                    deleted_channel_names.append(channel.name)
+                    await channel.delete(reason="月別カテゴリの自動クリーンアップ（当月経過）")
+                except discord.HTTPException as e:
+                    print(f"[MonthlyCategoryCreator] チャンネル削除失敗: {channel.name}: {e}")
+
+            try:
+                category_name = category.name
+                category_id = category.id
+                await category.delete(reason="月別カテゴリの自動クリーンアップ（当月経過）")
+                remove_dynamic_allowed_category_id(category_id)
+                print(f"[MonthlyCategoryCreator] カテゴリ『{category_name}』を自動削除しました。")
+                await self.send_cleanup_audit_log(guild, category_name, category_id, deleted_channel_names)
+            except discord.HTTPException as e:
+                print(f"[MonthlyCategoryCreator] カテゴリ削除失敗: {category.name}: {e}")
+
+    async def send_cleanup_audit_log(self, guild: discord.Guild, category_name: str, category_id: int, channel_names: list):
+        log_channel = guild.get_channel(AUDIT_LOG_CHANNEL_ID)
+        if log_channel is None:
+            return
+
+        now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+        embed = discord.Embed(
+            title="🗑️ 月別カテゴリ自動削除ログ",
+            color=discord.Color.red(),
+        )
+        embed.add_field(name="削除されたカテゴリ", value=f"{category_name} (ID: {category_id})", inline=False)
+        embed.add_field(
+            name="一緒に削除されたチャンネル",
+            value="\n".join(channel_names) if channel_names else "（チャンネルなし）",
+            inline=False,
+        )
+        embed.add_field(name="日時", value=now, inline=False)
+
+        try:
+            await log_channel.send(embed=embed)
+        except discord.Forbidden:
+            pass
 
     # ---------------- 手動コマンド ----------------
     @commands.command(name="CMC")

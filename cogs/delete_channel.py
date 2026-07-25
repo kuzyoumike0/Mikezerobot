@@ -34,6 +34,17 @@ def get_allowed_category_ids() -> list:
     return DELETE_ALLOWED_CATEGORY_IDS + load_dynamic_allowed_category_ids()
 
 
+def remove_dynamic_allowed_category_id(category_id: int):
+    """カテゴリ自体が削除された際、動的許可リストからも取り除く。"""
+    ids = load_dynamic_allowed_category_ids()
+    if category_id not in ids:
+        return
+    ids.remove(category_id)
+    os.makedirs(os.path.dirname(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH), exist_ok=True)
+    with open(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH, "w", encoding="utf-8") as f:
+        json.dump(ids, f, ensure_ascii=False, indent=2)
+
+
 def launcher_only():
     """launcherのボタン経由（ctx.from_launcher=True）以外での実行を弾くチェック。"""
     async def predicate(ctx: commands.Context) -> bool:
