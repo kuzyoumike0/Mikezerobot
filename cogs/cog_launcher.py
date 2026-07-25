@@ -38,6 +38,20 @@ class CogLauncherView(discord.ui.View):
             )
             return
 
+            @discord.ui.button(
+        label="サンプルCog起動2",
+        style=discord.ButtonStyle.primary,
+        custom_id="cog_launcher:sample_cog",
+    )
+    async def launch_sample_cog(self, interaction: discord.Interaction, button: discord.ui.Button):
+        target_cog = self.bot.get_cog("SampleCog")  # ← 起動したいCogのクラス名に変更
+        if target_cog is None:
+            await interaction.response.send_message(
+                "❌ SampleCog が見つかりません。コグフォルダに追加されているか確認してください。",
+                ephemeral=True,
+            )
+            return
+
         # ▼▼▼ ここに新規cogsの起動コードを書く ▼▼▼
 
         # 例1: 起動したいcog側に専用メソッド（例: start）を用意して呼び出す
