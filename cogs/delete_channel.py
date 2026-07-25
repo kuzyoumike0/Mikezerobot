@@ -1,7 +1,37 @@
 import discord
 from discord.ext import commands
 from datetime import datetime, timezone
+import json
+import os
 from config import DELETE_ALLOWED_CATEGORY_IDS, AUDIT_LOG_CHANNEL_ID
+
+DYNAMIC_ALLOWED_CATEGORY_IDS_PATH = "data/delete_allowed_categories.json"
+
+
+def load_dynamic_allowed_category_ids() -> list:
+    """自動作成された月別カテゴリなど、後から追加された削除許可カテゴリIDの一覧。"""
+    if not os.path.exists(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH):
+        return []
+    with open(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH, "r", encoding="utf-8") as f:
+        try:
+            return json.load(f)
+        except json.JSONDecodeError:
+            return []
+
+
+def add_dynamic_allowed_category_id(category_id: int):
+    """新しく作られたカテゴリのIDを削除許可リストに追加する（config.pyは書き換えない）。"""
+    ids = load_dynamic_allowed_category_ids()
+    if category_id in ids:
+        return
+    ids.append(category_id)
+    os.makedirs(os.path.dirname(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH), exist_ok=True)
+    with open(DYNAMIC_ALLOWED_CATEGORY_IDS_PATH, "w", encoding="utf-8") as f:
+        json.dump(ids, f, ensure_ascii=False, indent=2)
+
+
+def get_allowed_category_ids() -> list:
+    return DELETE_ALLOWED_CATEGORY_IDS + load_dynamic_allowed_category_ids()
 
 
 def launcher_only():
@@ -35,7 +65,7 @@ class DeleteChannel(commands.Cog):
             await reply(ctx, "❌ このチャンネルは削除できません。")
             return
 
-        if channel.category_id not in DELETE_ALLOWED_CATEGORY_IDS:
+        if channel.category_id not in get_allowed_category_ids():
             await reply(ctx, "❌ このチャンネルは削除対象のカテゴリに含まれていないため削除できません。")
             return
 

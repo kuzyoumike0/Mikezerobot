@@ -6,6 +6,7 @@ import datetime
 from zoneinfo import ZoneInfo
 
 from config import GUILD_ID, VC_CHANNEL_IDS
+from cogs.delete_channel import add_dynamic_allowed_category_id
 
 REFERENCE_CHANNEL_KEY = "セッション１"
 JST = ZoneInfo("Asia/Tokyo")
@@ -83,7 +84,8 @@ class MonthlyCategoryCreator(commands.Cog):
             return existing, False
         category = await guild.create_category(category_name)
         await self.position_above_reference(guild, category)
-        print(f"[MonthlyCategoryCreator] カテゴリ『{category_name}』を作成しました。")
+        add_dynamic_allowed_category_id(category.id)
+        print(f"[MonthlyCategoryCreator] カテゴリ『{category_name}』を作成しました。（削除許可リストにも追加）")
         return category, True
 
     # ---------------- 自動実行タスク ----------------
