@@ -15,6 +15,8 @@ GM_ROLE_NAME = "GM"
 
 MONTHLY_CATEGORY_NAME_PATTERN = re.compile(r"^\d+年\d+月$")
 EVENT_MONTH_CATEGORY_NAME_PATTERN = re.compile(r"^\d+月開催卓?$")
+M2M_OR_SD_COMMAND_PATTERN = re.compile(r"^!(?:m2m|SD)\s+(\d{4})$", re.IGNORECASE)
+HISTORY_SEARCH_LIMIT = 200
 
 
 def get_category_name(target_date: datetime.date) -> str:
@@ -77,10 +79,47 @@ class ChannelMover(commands.Cog):
         data["channel_dates"][str(channel_id)] = target_date.isoformat()
         self.save_data(data)
 
+    # ---------------- チャンネル履歴から !m2m / !SD の日付を復元 ----------------
+    async def recover_date_from_history(self, channel):
+        try:
+            async for msg in channel.history(limit=HISTORY_SEARCH_LIMIT):
+                match = M2M_OR_SD_COMMAND_PATTERN.match(msg.content.strip())
+                if not match:
+                    continue
+                s = match.group(1)
+                month, day = int(s[0:2]), int(s[2:4])
+                now = datetime.datetime.now(JST)
+                year = now.year if month >= now.month else now.year + 1
+                try:
+                    return datetime.date(year, month, day)
+                except ValueError:
+                    continue
+        except discord.Forbidden:
+            pass
+        return None
+
     # ---------------- 全体再ソート ----------------
     async def full_resort_category(self, category: discord.CategoryChannel):
         data = self.load_data()
         channel_dates = data.get("channel_dates", {})
+
+        # channel_dates未登録のチャンネルは、過去の !m2m / !SD メッセージから日付の復元を試みる
+        recovered_dates = {}
+        for ch in list(category.text_channels) + list(category.voice_channels):
+            if str(ch.id) in channel_dates:
+                continue
+            recovered = await self.recover_date_from_history(ch)
+            if recovered:
+                recovered_dates[str(ch.id)] = recovered.isoformat()
+
+        if recovered_dates:
+            # await（履歴取得）の後なので、保存直前に最新データを読み直してからマージする
+            data = self.load_data()
+            channel_dates = data.get("channel_dates", {})
+            channel_dates.update(recovered_dates)
+            data["channel_dates"] = channel_dates
+            self.save_data(data)
+
         unrecognized_channels = []
 
         def sort_key(ch):
