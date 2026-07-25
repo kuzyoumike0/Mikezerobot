@@ -134,7 +134,7 @@ class CogLauncher(commands.Cog):
         # Bot再起動後もボタンを押せるように、永続Viewとして登録しておく
         self.bot.add_view(CogLauncherView(bot))
 
-    @app_commands.command(name="call", description="機能起動パネルを表示（管理者・GMロール限定・本人のみ表示）")
+    @app_commands.command(name="call", description="機能パネルを表示")
     async def call(self, interaction: discord.Interaction):
         is_admin = interaction.user.guild_permissions.administrator
         has_gm_role = discord.utils.get(interaction.user.roles, name=GM_ROLE_NAME) is not None
@@ -147,8 +147,8 @@ class CogLauncher(commands.Cog):
             return
 
         embed = discord.Embed(
-            title="🚀 機能起動パネル",
-            description="ボタンを押すと、対応するcogの機能が起動します。",
+            title="🚀 機能パネル",
+            description="ボタンを押すと実行されます。",
             color=discord.Color.gold(),
         )
         await interaction.response.send_message(embed=embed, view=CogLauncherView(self.bot), ephemeral=True)
