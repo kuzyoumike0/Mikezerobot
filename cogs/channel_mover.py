@@ -137,7 +137,7 @@ class ChannelMover(commands.Cog):
         if category is None:
             await ctx.send(
                 f"カテゴリ『{category_name}』が見つかりません。"
-                f"先に `!createmonthlycategory {year} {month}` で作成してください。"
+                f"管理人にご連絡ください。"
             )
             return
 
