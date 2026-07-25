@@ -106,6 +106,42 @@ class CogLauncherView(discord.ui.View):
         await ctx.invoke(delete_command)
     # ==========================================================
 
+    # ==========================================================
+    # ユーザー招待ボタン（GMロールまたは管理者のみ。このボタンから !in を起動する）
+    # ==========================================================
+    @discord.ui.button(
+        label="ユーザー招待 (!in)",
+        style=discord.ButtonStyle.success,
+        custom_id="cog_launcher:invite_user",
+    )
+    async def invite_user(self, interaction: discord.Interaction, button: discord.ui.Button):
+        is_admin = interaction.user.guild_permissions.administrator
+        has_gm_role = discord.utils.get(interaction.user.roles, name=GM_ROLE_NAME) is not None
+
+        if not (is_admin or has_gm_role):
+            await interaction.response.send_message(
+                "❌ このボタンはGMロール（または管理者）のみ使用できます。",
+                ephemeral=True,
+            )
+            return
+
+        invite_command = self.bot.get_command("in")
+        if invite_command is None:
+            await interaction.response.send_message(
+                "❌ in コマンドが読み込まれていません（cogs/invite_to_channel.py を確認してください）。",
+                ephemeral=True,
+            )
+            return
+
+        await interaction.response.defer()
+
+        # !in コマンドをボタン経由で起動する（ctx.author を押した人に差し替える）
+        ctx = await self.bot.get_context(interaction.message)
+        ctx.author = interaction.user
+        ctx.from_launcher = True
+        await ctx.invoke(invite_command)
+    # ==========================================================
+
 
 class CogLauncher(commands.Cog):
     def __init__(self, bot: commands.Bot):
