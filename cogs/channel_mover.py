@@ -110,15 +110,30 @@ class ChannelMover(commands.Cog):
     async def m2m(self, ctx, date_str: str):
         """
         チャンネルを指定した月日のカテゴリへ移動し、開催日を記録してソートする（GM or 管理者のみ）。
-        使い方: !m2m 0630（6月30日）
+        使い方: !m2m 0630（6月30日） / !m2m r（固定カテゴリへ移動）
         """
         if not is_allowed_category(ctx.channel.category):
             await ctx.send("このチャンネルではこのコマンドは使えません。")
             return
 
         s = date_str.strip()
+
+        if s.lower() == "r":
+            category = ctx.guild.get_channel(CATEGORY_ID)
+            if category is None or not isinstance(category, discord.CategoryChannel):
+                await ctx.send(f"カテゴリが見つかりません（ID: {CATEGORY_ID}）。")
+                return
+            try:
+                await ctx.channel.edit(category=category, sync_permissions=False)
+            except discord.HTTPException as e:
+                print(f"[ERROR] m2m r: {e}")
+                await ctx.send("チャンネルの移動に失敗しました。Botの権限を確認してください。")
+                return
+            await ctx.send(f"✅ このチャンネルを『{category.name}』に移動しました。")
+            return
+
         if len(s) != 4 or not s.isdigit():
-            await ctx.send("入力形式が正しくありません。例: `!m2m 0630`（6月30日）")
+            await ctx.send("入力形式が正しくありません。例: `!m2m 0630`（6月30日）または `!m2m r`")
             return
 
         month = int(s[0:2])
@@ -160,7 +175,7 @@ class ChannelMover(commands.Cog):
         if isinstance(error, NotGMOrAdmin):
             await ctx.send("このコマンドはGMロールまたは管理者のみ使用できます。")
         elif isinstance(error, commands.MissingRequiredArgument):
-            await ctx.send("月日を指定してください。例: `!m2m 0630`")
+            await ctx.send("月日を指定してください。例: `!m2m 0630` または `!m2m r`")
         else:
             print(f"[ERROR] m2m: {error}")
             await ctx.send("エラーが発生しました。")
