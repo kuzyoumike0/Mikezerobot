@@ -81,7 +81,7 @@ class ChannelMover(commands.Cog):
     async def full_resort_category(self, category: discord.CategoryChannel):
         data = self.load_data()
         channel_dates = data.get("channel_dates", {})
-        failed_channels = []
+        unrecognized_channels = []
 
         def sort_key(ch):
             date_str = channel_dates.get(str(ch.id))
@@ -90,6 +90,7 @@ class ChannelMover(commands.Cog):
                     return (0, datetime.date.fromisoformat(date_str), ch.position)
                 except ValueError:
                     pass
+            unrecognized_channels.append(ch.name)
             return (1, datetime.date.max, ch.position)
 
         async def reorder(channels):
@@ -101,28 +102,27 @@ class ChannelMover(commands.Cog):
                     await ch.move(beginning=True, category=category, sync_permissions=False)
                 except discord.HTTPException as e:
                     print(f"[ChannelMover] 再ソート中にエラー（{ch.name}）: {e}")
-                    failed_channels.append((ch.name, str(e)))
 
         await reorder(category.text_channels)
         await reorder(category.voice_channels)
 
-        if failed_channels:
-            await self.send_sort_failure_log(category, failed_channels)
+        if unrecognized_channels:
+            await self.send_unrecognized_date_log(category, unrecognized_channels)
 
-    async def send_sort_failure_log(self, category: discord.CategoryChannel, failed_channels: list):
+    async def send_unrecognized_date_log(self, category: discord.CategoryChannel, channel_names: list):
         log_channel = category.guild.get_channel(AUDIT_LOG_CHANNEL_ID)
         if log_channel is None:
             return
 
         now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
         embed = discord.Embed(
-            title="⚠️ チャンネル並び替え失敗ログ",
-            description=f"カテゴリ『{category.name}』でソートできなかったチャンネルがあります。",
+            title="⚠️ 開催日未認識チャンネルログ",
+            description=f"カテゴリ『{category.name}』のソート時、開催日（月日）を認識できなかったチャンネルがあります。",
             color=discord.Color.orange(),
         )
         embed.add_field(
             name="対象チャンネル",
-            value="\n".join(f"- {name}: {error}" for name, error in failed_channels),
+            value="\n".join(f"- {name}" for name in channel_names),
             inline=False,
         )
         embed.add_field(name="日時", value=now, inline=False)
