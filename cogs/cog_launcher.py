@@ -94,7 +94,7 @@ class CogLauncherView(discord.ui.View):
     # ユーザー招待ボタン（GMロールまたは管理者のみ。このボタンから !in を起動する）
     # ==========================================================
     @discord.ui.button(
-        label="ユーザー招待 (!in)",
+        label="招待",
         style=discord.ButtonStyle.success,
         custom_id="cog_launcher:invite_user",
     )
