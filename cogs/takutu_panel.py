@@ -56,12 +56,14 @@ def base_overwrites(guild: discord.Guild, creator: discord.Member) -> dict:
             view_channel=True, send_messages=True, read_message_history=True
         ),
     }
+    # view_channel を付けないと一覧に出ず、リネーム等の編集操作ができない。
+    editor_perm = discord.PermissionOverwrite(view_channel=True, manage_channels=True)
     gm_role = discord.utils.get(guild.roles, name=GM_ROLE_NAME)
     if gm_role:
-        overwrites[gm_role] = discord.PermissionOverwrite(manage_channels=True)
+        overwrites[gm_role] = editor_perm
     mod_role = guild.get_role(MOD_ROLE_ID)
     if mod_role and mod_role != gm_role:
-        overwrites[mod_role] = discord.PermissionOverwrite(manage_channels=True)
+        overwrites[mod_role] = editor_perm
     return overwrites
 
 
@@ -130,10 +132,11 @@ async def create_table(interaction: discord.Interaction, secret_count: int):
         )
         return
 
-    participants = [m for m in vc.members if not m.bot and m.id != creator.id]
+    # 作成者がVCにいる場合も参加者に含める（4人なら個別チャンネル4つ）。
+    participants = [m for m in vc.members if not m.bot]
     if not participants:
         await interaction.response.send_message(
-            f"⚠️ {vc.mention} に参加者がいません。参加者がVCに入ってから押してください。",
+            f"⚠️ {vc.mention} に誰も入っていません。VCに入ってから押してください。",
             ephemeral=True,
         )
         return
@@ -152,36 +155,45 @@ async def create_table(interaction: discord.Interaction, secret_count: int):
     spectator_role = guild.get_role(SPECIAL_ROLE_ID)
     created = []
 
+    # Discordはカテゴリ内を「テキスト→ボイス」の順に並べるため、
+    # 作成順＝表示順になるようテキストを先に、密談VCを最後に作る。
     try:
-        for i in range(1, secret_count + 1):
-            overwrites = voice_overwrites(guild, creator, participants, spectator_role)
-            created.append(await guild.create_voice_channel(
-                f"密談{i}", category=category, overwrites=overwrites
-            ))
-
-        overwrites = base_overwrites(guild, creator)
-        if spectator_role:
-            overwrites[spectator_role] = discord.PermissionOverwrite(
-                view_channel=True, send_messages=False, read_message_history=True
-            )
-        created.append(await guild.create_text_channel(
-            "壁打ち", category=category, overwrites=overwrites
-        ))
-
+        # 1. 全体（作成者＋参加者全員）
         overwrites = base_overwrites(guild, creator)
         add_viewers(overwrites, participants)
         created.append(await guild.create_text_channel(
             "全体", category=category, overwrites=overwrites
         ))
 
+        # 2. 参加者ごとの1対1
         for member in participants:
             overwrites = base_overwrites(guild, creator)
             add_viewers(overwrites, [member])
             channel = await guild.create_text_channel(
                 sanitize(member.display_name), category=category, overwrites=overwrites
             )
-            await channel.send(f"{creator.mention} と {member.mention} の個別チャンネルです。")
+            if member.id == creator.id:
+                await channel.send(f"{member.mention} の個別チャンネルです。")
+            else:
+                await channel.send(f"{creator.mention} と {member.mention} の個別チャンネルです。")
             created.append(channel)
+
+        # 3. 壁打ち（作成者＋見学ロールのみ／見学ロールも書き込み可）
+        overwrites = base_overwrites(guild, creator)
+        if spectator_role:
+            overwrites[spectator_role] = discord.PermissionOverwrite(
+                view_channel=True, send_messages=True, read_message_history=True
+            )
+        created.append(await guild.create_text_channel(
+            "壁打ち", category=category, overwrites=overwrites
+        ))
+
+        # 4. 密談VC
+        for i in range(1, secret_count + 1):
+            overwrites = voice_overwrites(guild, creator, participants, spectator_role)
+            created.append(await guild.create_voice_channel(
+                f"密談{i}", category=category, overwrites=overwrites
+            ))
 
     except discord.Forbidden:
         data[key] = {"creator_id": creator.id, "channel_ids": [c.id for c in created]}
