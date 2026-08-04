@@ -175,7 +175,7 @@ async def create_table(interaction: discord.Interaction, secret_count: int):
             if member.id == creator.id:
                 await channel.send(f"{member.mention} の個別チャンネルです。")
             else:
-                await channel.send(f"{member.mention} の個別チャンネルです。")
+                await channel.send(f"{creator.mention} と {member.mention} の個別チャンネルです。")
             created.append(channel)
 
         # 3. 壁打ち（作成者＋見学ロールのみ／見学ロールも書き込み可）
