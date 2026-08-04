@@ -33,16 +33,34 @@ class VCChannelView(discord.ui.View):
         self.vc_name = vc_name
 
     def get_vc_target(self, guild: discord.Guild):
-        """対象VC・参加者（bot除く）・エラーメッセージを返す。"""
+        """対象VC・参加者（bot除く）・エラーメッセージを返す。
+
+        どの分岐で失敗したか特定できるよう、メッセージ先頭に識別コードを付ける。
+        """
         vc_id = VC_CHANNEL_IDS.get(self.vc_name)
+        print(f"[setupvc] vc_name={self.vc_name!r} -> vc_id={vc_id} (keys={list(VC_CHANNEL_IDS)})")
+
         if not vc_id:
-            return None, None, f"設定エラー: VC_CHANNEL_IDS に『{self.vc_name}』が見つかりません。"
+            return None, None, (
+                f"[E1] VC_CHANNEL_IDS に『{self.vc_name}』というキーがありません。"
+                f"（現在のキー: {list(VC_CHANNEL_IDS)}）"
+            )
+
         vc_channel = guild.get_channel(vc_id)
         if vc_channel is None:
-            return None, None, f"VCが見つかりません（ID: {vc_id}）。Botの権限や設定を確認してください。"
+            return None, None, (
+                f"[E2] ID {vc_id} のチャンネルが取得できません（『{self.vc_name}』）。"
+                "Botのキャッシュにありません。"
+            )
+
         if not isinstance(vc_channel, discord.VoiceChannel):
-            return None, None, f"指定IDはボイスチャンネルではありません（ID: {vc_id}）。"
+            return None, None, (
+                f"[E3] ID {vc_id} はボイスチャンネルではありません"
+                f"（種別: {type(vc_channel).__name__}）。"
+            )
+
         members = [m for m in vc_channel.members if not m.bot]
+        print(f"[setupvc] 『{vc_channel.name}』 在室{len(members)}人 category={vc_channel.category}")
         return vc_channel, members, None
 
     @discord.ui.button(label="VC参加者共有チャンネル作成", style=discord.ButtonStyle.primary)
@@ -193,7 +211,10 @@ class SetupVC(commands.Cog):
         if ctx.channel.id != ALLOWED_TEXT_CHANNEL_ID:
             await ctx.send("このチャンネルでは `!setupvc` コマンドは使用できません。", delete_after=10)
             return
-        await ctx.send("どのVCを対象にしますか？", view=VCSelectorView(bot=self.bot, author=ctx.author))
+        await ctx.send(
+            "どのVCを対象にしますか？ `[v2]`",
+            view=VCSelectorView(bot=self.bot, author=ctx.author),
+        )
 
 # --------------------------
 # async setup エントリポイント
