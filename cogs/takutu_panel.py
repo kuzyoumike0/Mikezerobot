@@ -165,7 +165,7 @@ async def create_table(interaction: discord.Interaction, secret_count: int):
                 view_channel=True, send_messages=False, read_message_history=True
             )
         created.append(await guild.create_text_channel(
-            "見学", category=category, overwrites=overwrites
+            "壁打ち", category=category, overwrites=overwrites
         ))
 
         overwrites = base_overwrites(guild, creator)
