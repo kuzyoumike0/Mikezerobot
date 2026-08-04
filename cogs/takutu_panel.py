@@ -72,10 +72,30 @@ def add_viewers(overwrites: dict, members, send: bool = True):
         )
 
 
+def voice_overwrites(guild: discord.Guild, creator: discord.Member, participants, spectator_role):
+    """密談VC用：作成者と参加者は通話可、見学ロールは聞き専で参加できる。"""
+    overwrites = base_overwrites(guild, creator)
+    overwrites[guild.me] = discord.PermissionOverwrite(
+        view_channel=True, connect=True, manage_channels=True
+    )
+    overwrites[creator] = discord.PermissionOverwrite(
+        view_channel=True, connect=True, speak=True
+    )
+    for member in participants:
+        overwrites[member] = discord.PermissionOverwrite(
+            view_channel=True, connect=True, speak=True
+        )
+    if spectator_role:
+        overwrites[spectator_role] = discord.PermissionOverwrite(
+            view_channel=True, connect=True, speak=False
+        )
+    return overwrites
+
+
 class SecretCountModal(Modal, title="立卓"):
     count = TextInput(
-        label="密談チャンネルの数",
-        placeholder="例: 3（0にすると密談チャンネルは作りません）",
+        label="密談VCの数",
+        placeholder="例: 3（0にすると密談VCは作りません）",
         max_length=2,
         required=True,
     )
@@ -84,7 +104,7 @@ class SecretCountModal(Modal, title="立卓"):
         value = self.count.value.strip()
         if not value.isdigit() or int(value) > MAX_SECRET_CHANNELS:
             await interaction.response.send_message(
-                f"❌ 密談チャンネルの数は 0〜{MAX_SECRET_CHANNELS} の半角数字で入力してください。",
+                f"❌ 密談VCの数は 0〜{MAX_SECRET_CHANNELS} の半角数字で入力してください。",
                 ephemeral=True,
             )
             return
@@ -134,13 +154,8 @@ async def create_table(interaction: discord.Interaction, secret_count: int):
 
     try:
         for i in range(1, secret_count + 1):
-            overwrites = base_overwrites(guild, creator)
-            add_viewers(overwrites, participants)
-            if spectator_role:
-                overwrites[spectator_role] = discord.PermissionOverwrite(
-                    view_channel=True, send_messages=False, read_message_history=True
-                )
-            created.append(await guild.create_text_channel(
+            overwrites = voice_overwrites(guild, creator, participants, spectator_role)
+            created.append(await guild.create_voice_channel(
                 f"密談{i}", category=category, overwrites=overwrites
             ))
 
