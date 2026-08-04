@@ -1,7 +1,7 @@
 import discord
 from discord.ext import commands
 
-from config import VC_CHANNEL_IDS, VC_CATEGORY_ID
+from config import VC_CHANNEL_IDS
 
 
 class VCDebug(commands.Cog):
@@ -36,7 +36,15 @@ class VCDebug(commands.Cog):
             return "\n".join(lines)
 
         category = channel.category
-        lines.append(f"  カテゴリ: {category.name if category else 'なし'}")
+        if category is None:
+            lines.append("  ❌ カテゴリに属していません（作成先が決まらないため作成できません）。")
+        else:
+            can_manage = category.permissions_for(guild.me).manage_channels
+            lines.append(
+                f"  作成先カテゴリ: 『{category.name}』 "
+                f"作成権限={'✅' if can_manage else '❌ 「チャンネルの管理」がありません'} "
+                f"({len(category.channels)}/50)"
+            )
 
         perms = channel.permissions_for(guild.me)
         lines.append(
@@ -61,18 +69,6 @@ class VCDebug(commands.Cog):
 
         for name, vc_id in VC_CHANNEL_IDS.items():
             blocks.append(await self.diagnose(guild, name, vc_id))
-
-        # 作成先カテゴリ側の確認
-        category = guild.get_channel(VC_CATEGORY_ID)
-        if not isinstance(category, discord.CategoryChannel):
-            blocks.append(f"**作成先カテゴリ** (`{VC_CATEGORY_ID}`)\n  ❌ カテゴリが見つかりません。")
-        else:
-            can_manage = category.permissions_for(guild.me).manage_channels
-            blocks.append(
-                f"**作成先カテゴリ** 『{category.name}』\n"
-                f"  チャンネル作成権限: {'✅' if can_manage else '❌ Botに「チャンネルの管理」がありません'}\n"
-                f"  現在のチャンネル数: {len(category.channels)} / 50"
-            )
 
         await ctx.send("🔍 **VC設定診断**\n\n" + "\n\n".join(blocks))
 

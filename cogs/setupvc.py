@@ -3,7 +3,7 @@ import discord
 from discord.ext import commands
 from discord.ui import View, Button
 from datetime import datetime, timedelta, timezone
-from config import VC_CHANNEL_IDS, VC_CATEGORY_ID, SPECIAL_ROLE_ID, ALLOWED_TEXT_CHANNEL_ID
+from config import VC_CHANNEL_IDS, SPECIAL_ROLE_ID, ALLOWED_TEXT_CHANNEL_ID
 
 # --------------------------
 # チャンネル削除ボタンビュー
@@ -32,17 +32,18 @@ class VCChannelView(discord.ui.View):
         self.author = author
         self.vc_name = vc_name
 
-    def get_vc_members(self, guild: discord.Guild):
+    def get_vc_target(self, guild: discord.Guild):
+        """対象VC・参加者（bot除く）・エラーメッセージを返す。"""
         vc_id = VC_CHANNEL_IDS.get(self.vc_name)
         if not vc_id:
-            return None, f"設定エラー: VC_CHANNEL_IDS に『{self.vc_name}』が見つかりません。"
+            return None, None, f"設定エラー: VC_CHANNEL_IDS に『{self.vc_name}』が見つかりません。"
         vc_channel = guild.get_channel(vc_id)
         if vc_channel is None:
-            return None, f"VCが見つかりません（ID: {vc_id}）。Botの権限や設定を確認してください。"
+            return None, None, f"VCが見つかりません（ID: {vc_id}）。Botの権限や設定を確認してください。"
         if not isinstance(vc_channel, discord.VoiceChannel):
-            return None, f"指定IDはボイスチャンネルではありません（ID: {vc_id}）。"
+            return None, None, f"指定IDはボイスチャンネルではありません（ID: {vc_id}）。"
         members = [m for m in vc_channel.members if not m.bot]
-        return members, None
+        return vc_channel, members, None
 
     @discord.ui.button(label="VC参加者共有チャンネル作成", style=discord.ButtonStyle.primary)
     async def create_shared(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -50,7 +51,7 @@ class VCChannelView(discord.ui.View):
             await interaction.response.defer(ephemeral=True)
             guild = interaction.guild
 
-            members, err = self.get_vc_members(guild)
+            vc_channel, members, err = self.get_vc_target(guild)
             if err:
                 await interaction.followup.send(f"❌ {err}", ephemeral=True)
                 return
@@ -58,14 +59,18 @@ class VCChannelView(discord.ui.View):
                 await interaction.followup.send("⚠️ VCに参加者がいません（Botは除外）。", ephemeral=True)
                 return
 
-            category = guild.get_channel(VC_CATEGORY_ID)
-            if category is None or not isinstance(category, discord.CategoryChannel):
-                await interaction.followup.send(f"❌ カテゴリが見つかりません（ID: {VC_CATEGORY_ID}）。", ephemeral=True)
+            category = vc_channel.category
+            if category is None:
+                await interaction.followup.send(
+                    f"❌ VC『{vc_channel.name}』がカテゴリに属していません。", ephemeral=True
+                )
                 return
 
             me = guild.me
             if not category.permissions_for(me).manage_channels:
-                await interaction.followup.send("❌ Botに『チャンネルの管理』権限がありません。", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Botにカテゴリ『{category.name}』の『チャンネルの管理』権限がありません。", ephemeral=True
+                )
                 return
 
             now = datetime.now(timezone(timedelta(hours=9)))
@@ -98,7 +103,7 @@ class VCChannelView(discord.ui.View):
             await interaction.response.defer(ephemeral=True)
             guild = interaction.guild
 
-            members, err = self.get_vc_members(guild)
+            vc_channel, members, err = self.get_vc_target(guild)
             if err:
                 await interaction.followup.send(f"❌ {err}", ephemeral=True)
                 return
@@ -106,14 +111,18 @@ class VCChannelView(discord.ui.View):
                 await interaction.followup.send("⚠️ VCに参加者がいません（Botは除外）。", ephemeral=True)
                 return
 
-            category = guild.get_channel(VC_CATEGORY_ID)
-            if category is None or not isinstance(category, discord.CategoryChannel):
-                await interaction.followup.send(f"❌ カテゴリが見つかりません（ID: {VC_CATEGORY_ID}）。", ephemeral=True)
+            category = vc_channel.category
+            if category is None:
+                await interaction.followup.send(
+                    f"❌ VC『{vc_channel.name}』がカテゴリに属していません。", ephemeral=True
+                )
                 return
 
             me = guild.me
             if not category.permissions_for(me).manage_channels:
-                await interaction.followup.send("❌ Botに『チャンネルの管理』権限がありません。", ephemeral=True)
+                await interaction.followup.send(
+                    f"❌ Botにカテゴリ『{category.name}』の『チャンネルの管理』権限がありません。", ephemeral=True
+                )
                 return
 
             author_in_guild = guild.get_member(self.author.id) or self.author
