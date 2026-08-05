@@ -4,8 +4,6 @@ from datetime import datetime
 # トークンは環境変数から取得（.envなどに設定）
 TOKEN = os.getenv("TOKEN")
 
-# 更新用
-
 # ギルド（サーバー）ID
 GUILD_ID = 1384327412946309160
 
